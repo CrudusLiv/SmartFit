@@ -3,6 +3,7 @@ package com.example.smartfit.data.repository
 import android.util.Log
 import com.example.smartfit.data.local.ActivityDao
 import com.example.smartfit.data.local.ActivityEntity
+import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.data.remote.ApiService
 import com.example.smartfit.data.remote.ExerciseInfoResponse
 import com.example.smartfit.data.remote.Post
@@ -71,10 +72,53 @@ class ActivityRepository(
     fun getExercisesFromWger(limit: Int = 20, offset: Int = 0): Flow<Result<ExerciseInfoResponse>> = flow {
         emit(Result.Loading)
         try {
-            val response = wgerApiService.getExercises(limit = limit, offset = offset, language = 2)
+            val response = wgerApiService.getExercises(limit = limit, offset = offset, language = 2, status = 2)
             emit(Result.Success(response))
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching exercises", e)
+            emit(Result.Error(e))
+        }
+    }.catch { throwable ->
+        emit(Result.Error(Exception(throwable)))
+    }.flowOn(Dispatchers.IO)
+
+    fun getWorkoutSuggestions(limit: Int = 12, offset: Int = 0): Flow<Result<List<WorkoutSuggestion>>> = flow {
+        emit(Result.Loading)
+        try {
+            val fetchLimit = (limit * 3).coerceAtLeast(limit)
+            val response = wgerApiService.getExercises(
+                limit = fetchLimit,
+                offset = offset,
+                language = 2,
+                status = 2
+            )
+            val suggestions = response.results
+                .asSequence()
+                .map { exercise ->
+                    val rawImage = exercise.images.firstOrNull { it.is_main == true }?.image
+                        ?: exercise.images.firstOrNull { !it.image.isNullOrBlank() }?.image
+                    val imageUrl = rawImage?.let { image ->
+                        if (image.startsWith("http")) image else "https://wger.de$image"
+                    }
+                    val description = exercise.description?.let(::stripHtml).orEmpty()
+                    WorkoutSuggestion(
+                        id = exercise.id ?: exercise.hashCode(),
+                        name = exercise.name.orEmpty().ifBlank { "Unnamed exercise" },
+                        category = exercise.category?.name.orEmpty().ifBlank { "General" },
+                        primaryMuscles = exercise.muscles.mapNotNull { it.name ?: it.name_en }.ifEmpty { listOf("Full body") },
+                        equipment = exercise.equipment.mapNotNull { it.name }.ifEmpty { listOf("Bodyweight") },
+                        imageUrl = imageUrl,
+                        description = description.ifBlank { "Stay active with a quick session." }
+                    )
+                }
+                .filter { it.description.isNotBlank() }
+                .distinctBy { it.id }
+                .take(limit)
+                .toList()
+
+            emit(Result.Success(suggestions))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching workout suggestions", e)
             emit(Result.Error(e))
         }
     }.catch { throwable ->
@@ -108,3 +152,9 @@ class ActivityRepository(
         activityDao.getActivityById(id)
     }
 }
+
+private fun stripHtml(raw: String): String = raw
+    .replace(Regex("<[^>]*>"), "")
+    .replace("\n", " ")
+    .replace(Regex("\\s+"), " ")
+    .trim()

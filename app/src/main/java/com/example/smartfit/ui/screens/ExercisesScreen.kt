@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.viewmodel.ActivityViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,8 +27,8 @@ fun ExercisesScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) {
-        if (!uiState.isLoading && uiState.exercises.isEmpty() && uiState.error == null) {
-            viewModel.loadExercises()
+        if (!uiState.suggestionsLoading && uiState.workoutSuggestions.isEmpty() && uiState.suggestionsError == null) {
+            viewModel.loadWorkoutSuggestions(limit = 20)
         }
     }
 
@@ -49,7 +50,7 @@ fun ExercisesScreen(
                 .padding(padding)
         ) {
             when {
-                uiState.isLoading -> {
+                uiState.suggestionsLoading -> {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -59,7 +60,7 @@ fun ExercisesScreen(
                         Text("Loading from Wger…")
                     }
                 }
-                uiState.error != null -> {
+                uiState.suggestionsError != null -> {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -68,19 +69,19 @@ fun ExercisesScreen(
                     ) {
                         Text("Failed to load exercises", color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(8.dp))
-                        Text(uiState.error ?: "Unknown error")
+                        Text(uiState.suggestionsError ?: "Unknown error")
                         Spacer(Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadExercises() }) { Text("Retry") }
+                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) { Text("Retry") }
                     }
                 }
-                uiState.exercises.isEmpty() -> {
+                uiState.workoutSuggestions.isEmpty() -> {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text("No exercises returned")
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { viewModel.loadExercises() }) { Text("Load") }
+                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) { Text("Load") }
                     }
                 }
                 else -> {
@@ -91,18 +92,13 @@ fun ExercisesScreen(
                     ) {
                         item {
                             Text(
-                                "Total: ${uiState.totalCount}",
+                                "Total: ${uiState.workoutSuggestions.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        items(uiState.exercises, key = { it.id ?: it.hashCode() }) { ex ->
-                            ExerciseRow(
-                                name = ex.name ?: "Unnamed",
-                                category = ex.category?.name ?: "Unknown",
-                                imageUrl = ex.images.firstOrNull { it.image?.isNotBlank() == true }?.image,
-                                description = ex.description ?: ""
-                            )
+                        items(uiState.workoutSuggestions, key = { it.id }) { suggestion ->
+                            ExerciseRow(suggestion)
                         }
                     }
                 }
@@ -112,30 +108,33 @@ fun ExercisesScreen(
 }
 
 @Composable
-private fun ExerciseRow(
-    name: String,
-    category: String,
-    imageUrl: String?,
-    description: String
-) {
+private fun ExerciseRow(suggestion: WorkoutSuggestion) {
     Card {
         Column(Modifier.padding(12.dp)) {
-            Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(suggestion.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
-            Text(category, style = MaterialTheme.typography.labelMedium)
-            if (!imageUrl.isNullOrBlank()) {
+            Text(suggestion.category, style = MaterialTheme.typography.labelMedium)
+            if (!suggestion.imageUrl.isNullOrBlank()) {
                 Spacer(Modifier.height(8.dp))
                 AsyncImage(
-                    model = imageUrl,
+                    model = suggestion.imageUrl,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(160.dp)
                 )
             }
-            if (description.isNotBlank()) {
+            if (suggestion.primaryMuscles.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text(description.replace(Regex("<[^>]*>"), ""), style = MaterialTheme.typography.bodyMedium)
+                Text("Focus: ${suggestion.primaryMuscles.joinToString()}", style = MaterialTheme.typography.bodySmall)
+            }
+            if (suggestion.equipment.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text("Equipment: ${suggestion.equipment.joinToString()}", style = MaterialTheme.typography.bodySmall)
+            }
+            if (suggestion.description.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(suggestion.description, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

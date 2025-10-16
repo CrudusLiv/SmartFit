@@ -18,7 +18,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.ui.theme.*
 import com.example.smartfit.viewmodel.ActivityViewModel
 
@@ -34,6 +37,12 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val userPreferences by viewModel.userPreferencesState.collectAsState()
     val todayStats by viewModel.getTodayStats().collectAsState(initial = emptyMap())
+
+    LaunchedEffect(Unit) {
+        if (uiState.workoutSuggestions.isEmpty()) {
+            viewModel.loadWorkoutSuggestions(limit = 8)
+        }
+    }
 
     // Animation state
     var visible by remember { mutableStateOf(false) }
@@ -158,6 +167,66 @@ fun HomeScreen(
                             color = FitnessGreen,
                             onClick = onNavigateToProfile
                         )
+                    }
+                }
+            }
+
+            // Workout suggestions from network
+            item {
+                Text(
+                    "Workout Suggestions",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            when {
+                uiState.suggestionsLoading && uiState.workoutSuggestions.isEmpty() -> {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.width(12.dp))
+                            Text("Fetching workouts…")
+                        }
+                    }
+                }
+
+                uiState.suggestionsError != null && uiState.workoutSuggestions.isEmpty() -> {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "Couldn't load suggestions",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(uiState.suggestionsError ?: "Unknown error")
+                            Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 8) }) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                }
+
+                uiState.workoutSuggestions.isNotEmpty() -> {
+                    item {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(uiState.workoutSuggestions, key = { it.id }) { suggestion ->
+                                WorkoutSuggestionCard(suggestion)
+                            }
+                        }
                     }
                 }
             }
@@ -453,6 +522,67 @@ fun TipCard(title: String, body: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2
             )
+        }
+    }
+}
+
+@Composable
+private fun WorkoutSuggestionCard(suggestion: WorkoutSuggestion) {
+    Card(
+        modifier = Modifier
+            .width(200.dp)
+            .semantics { contentDescription = "${suggestion.name} workout suggestion" }
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (!suggestion.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = suggestion.imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                )
+            }
+            Text(
+                suggestion.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                suggestion.category,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            if (suggestion.primaryMuscles.isNotEmpty()) {
+                Text(
+                    "Focus: ${suggestion.primaryMuscles.joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (suggestion.description.isNotBlank()) {
+                Text(
+                    suggestion.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (suggestion.equipment.isNotEmpty()) {
+                Text(
+                    "Equipment: ${suggestion.equipment.joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

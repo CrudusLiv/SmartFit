@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.smartfit.data.datastore.UserPreferences
 import com.example.smartfit.data.local.ActivityEntity
+import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.data.remote.ExerciseInfo
 import com.example.smartfit.data.remote.Post
 import com.example.smartfit.data.repository.ActivityRepository
@@ -29,6 +30,9 @@ data class ActivityUiState(
     val activities: List<ActivityEntity> = emptyList(),
     val activitiesLoading: Boolean = false,
     val activitiesError: String? = null,
+    val workoutSuggestions: List<WorkoutSuggestion> = emptyList(),
+    val suggestionsLoading: Boolean = false,
+    val suggestionsError: String? = null,
     val tips: List<Post> = emptyList(),
     val tipsLoading: Boolean = false,
     val tipsError: String? = null,
@@ -87,6 +91,7 @@ class ActivityViewModel(
     init {
         observeActivities()
         loadTips()
+        loadWorkoutSuggestions()
     }
 
     private fun observeActivities() {
@@ -155,6 +160,33 @@ class ActivityViewModel(
                         it.copy(
                             isLoading = false,
                             error = result.exception.message
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun loadWorkoutSuggestions(limit: Int = 8, offset: Int = 0) {
+        viewModelScope.launch {
+            repository.getWorkoutSuggestions(limit, offset).collect { result ->
+                when (result) {
+                    is Result.Loading -> _uiState.update {
+                        it.copy(suggestionsLoading = true, suggestionsError = null)
+                    }
+
+                    is Result.Success -> _uiState.update {
+                        it.copy(
+                            workoutSuggestions = result.data,
+                            suggestionsLoading = false,
+                            suggestionsError = null
+                        )
+                    }
+
+                    is Result.Error -> _uiState.update {
+                        it.copy(
+                            suggestionsLoading = false,
+                            suggestionsError = result.exception.message
                         )
                     }
                 }
@@ -265,7 +297,14 @@ class ActivityViewModel(
     }
 
     fun clearError() {
-        _uiState.update { it.copy(error = null, tipsError = null, activitiesError = null) }
+        _uiState.update {
+            it.copy(
+                error = null,
+                tipsError = null,
+                activitiesError = null,
+                suggestionsError = null
+            )
+        }
     }
 
     private fun aggregateStats(activities: List<ActivityEntity>): Map<String, Int> {

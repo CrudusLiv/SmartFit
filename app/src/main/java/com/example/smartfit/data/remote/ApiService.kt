@@ -14,18 +14,12 @@ data class ExerciseInfoResponse(
 data class ExerciseInfo(
     val id: Int? = null,
     val name: String? = null,
-    val uuid: String? = null,
-    val exercise_base: Int? = null,
     val description: String? = null,
-    val created: String? = null,
     val category: ExerciseCategory? = null,
     val muscles: List<Muscle> = emptyList(),
     val muscles_secondary: List<Muscle> = emptyList(),
     val equipment: List<Equipment> = emptyList(),
-    val variations: List<Int> = emptyList(),
-    val author_history: List<String> = emptyList(),
-    val images: List<ExerciseImage> = emptyList(),
-    val videos: List<ExerciseVideo> = emptyList()
+    val images: List<ExerciseImage> = emptyList()
 )
 
 data class ExerciseCategory(
@@ -36,10 +30,7 @@ data class ExerciseCategory(
 data class Muscle(
     val id: Int? = null,
     val name: String? = null,
-    val name_en: String? = null,
-    val is_front: Boolean? = null,
-    val image_url_main: String? = null,
-    val image_url_secondary: String? = null
+    val name_en: String? = null
 )
 
 data class Equipment(
@@ -49,31 +40,8 @@ data class Equipment(
 
 data class ExerciseImage(
     val id: Int? = null,
-    val uuid: String? = null,
-    val exercise_base: Int? = null,
     val image: String? = null,
-    val is_main: Boolean? = null,
-    val style: String? = null,
-    val license: Int? = null,
-    val license_author: String? = null,
-    val author_history: List<String> = emptyList()
-)
-
-data class ExerciseVideo(
-    val id: Int? = null,
-    val uuid: String? = null,
-    val exercise_base: Int? = null,
-    val video: String? = null,
-    val is_main: Boolean? = null,
-    val size: Int? = null,
-    val duration: Int? = null,
-    val width: Int? = null,
-    val height: Int? = null,
-    val codec: String? = null,
-    val codec_long: String? = null,
-    val license: Int? = null,
-    val license_author: String? = null,
-    val author_history: List<String> = emptyList()
+    val is_main: Boolean? = null
 )
 
 // JSONPlaceholder API Models
@@ -94,6 +62,7 @@ interface WgerApiService {
     suspend fun getExercises(
         @Query("limit") limit: Int = 20,
         @Query("offset") offset: Int = 0,
-        @Query("language") language: Int = 2
+        @Query("language") language: Int = 2,
+        @Query("status") status: Int = 2
     ): ExerciseInfoResponse
 }
