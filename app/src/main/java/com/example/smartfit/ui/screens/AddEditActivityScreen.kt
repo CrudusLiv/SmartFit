@@ -33,12 +33,21 @@ fun AddEditActivityScreen(
 
     var activityType by remember { mutableStateOf("Steps") }
     var value by remember { mutableStateOf("") }
-    var unit by remember { mutableStateOf("steps") }
     var notes by remember { mutableStateOf("") }
     var selectedDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
+
+    // Compute unit based on activity type
+    val unit = remember(activityType) {
+        when (activityType) {
+            "Steps" -> "steps"
+            "Workout" -> "minutes"
+            "Calories" -> "kcal"
+            else -> "units"
+        }
+    }
 
     // Load activity if editing
     LaunchedEffect(activityId) {
@@ -48,22 +57,11 @@ fun AddEditActivityScreen(
                     state.activities.find { it.id == activityId }?.let { activity ->
                         activityType = activity.type
                         value = activity.value.toString()
-                        unit = activity.unit
                         notes = activity.notes
                         selectedDate = activity.date
                     }
                 }
             }
-        }
-    }
-
-    // Update unit based on activity type
-    LaunchedEffect(activityType) {
-        unit = when (activityType) {
-            "Steps" -> "steps"
-            "Workout" -> "minutes"
-            "Calories" -> "kcal"
-            else -> "units"
         }
     }
 
@@ -88,7 +86,6 @@ fun AddEditActivityScreen(
                                     id = if (isEditMode) activityId else 0,
                                     type = activityType,
                                     value = valueInt,
-                                    unit = unit,
                                     date = selectedDate,
                                     notes = notes
                                 )
@@ -267,7 +264,6 @@ fun AddEditActivityScreen(
                             id = if (isEditMode) activityId else 0,
                             type = activityType,
                             value = valueInt,
-                            unit = unit,
                             date = selectedDate,
                             notes = notes
                         )

@@ -263,12 +263,18 @@ fun ActivityItemCard(
         "Calories" -> FitnessOrange
         else -> MaterialTheme.colorScheme.primary
     }
+    val unit = when (activity.type) {
+        "Steps" -> "steps"
+        "Workout" -> "min"
+        "Calories" -> "kcal"
+        else -> ""
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .semantics {
-                contentDescription = "${activity.type} activity: ${activity.value} ${activity.unit}"
+                contentDescription = "${activity.type} activity: ${activity.value} $unit"
             },
         onClick = onEdit
     ) {
@@ -305,7 +311,7 @@ fun ActivityItemCard(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "${activity.value} ${activity.unit}",
+                        "${activity.value} $unit",
                         style = MaterialTheme.typography.bodyLarge,
                         color = color
                     )

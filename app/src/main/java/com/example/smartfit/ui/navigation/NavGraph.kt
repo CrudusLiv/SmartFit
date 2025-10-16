@@ -18,6 +18,7 @@ sealed class Screen(val route: String) {
         fun createRoute(activityId: Long = -1L) = "add_edit_activity/$activityId"
     }
     object Profile : Screen("profile")
+    object Exercises : Screen("exercises")
 }
 
 @Composable
@@ -25,8 +26,6 @@ fun NavGraph(
     navController: NavHostController,
     viewModel: ActivityViewModel
 ) {
-    val userPreferences by viewModel.userPreferencesState.collectAsState()
-
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route
@@ -42,6 +41,9 @@ fun NavGraph(
                 },
                 onNavigateToProfile = {
                     navController.navigate(Screen.Profile.route)
+                },
+                onNavigateToExercises = {
+                    navController.navigate(Screen.Exercises.route)
                 }
             )
         }
@@ -80,6 +82,15 @@ fun NavGraph(
 
         composable(Screen.Profile.route) {
             ProfileScreen(
+                viewModel = viewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.Exercises.route) {
+            ExercisesScreen(
                 viewModel = viewModel,
                 onNavigateBack = {
                     navController.popBackStack()

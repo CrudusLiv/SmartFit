@@ -28,7 +28,8 @@ fun HomeScreen(
     viewModel: ActivityViewModel,
     onNavigateToActivityLog: () -> Unit,
     onNavigateToAddActivity: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    onNavigateToProfile: () -> Unit,
+    onNavigateToExercises: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userPreferences by viewModel.userPreferencesState.collectAsState()
@@ -41,29 +42,6 @@ fun HomeScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "SmartFit",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToProfile) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = "Profile"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNavigateToAddActivity,
@@ -80,6 +58,27 @@ fun HomeScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Page header
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Dashboard",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onNavigateToProfile) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = "Profile"
+                        )
+                    }
+                }
+            }
+
             // Welcome message
             item {
                 AnimatedVisibility(
@@ -100,45 +99,26 @@ fun HomeScreen(
             }
 
             item {
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = fadeIn() + expandVertically()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        StatsCard(
-                            title = "Steps",
-                            value = todayStats["Steps"] ?: 0,
-                            goal = userPreferences.dailyStepGoal,
-                            unit = "steps",
-                            icon = Icons.Default.DirectionsRun,
-                            color = FitnessGreen,
-                            progress = viewModel.calculateStepGoalProgress(
-                                todayStats["Steps"] ?: 0,
-                                userPreferences.dailyStepGoal
-                            )
-                        )
-
-                        StatsCard(
-                            title = "Calories Burned",
-                            value = todayStats["Calories"] ?: 0,
-                            goal = userPreferences.dailyCalorieGoal,
-                            unit = "kcal",
-                            icon = Icons.Default.Whatshot,
-                            color = FitnessOrange,
-                            progress = (todayStats["Calories"] ?: 0).toFloat() /
-                                userPreferences.dailyCalorieGoal.toFloat()
-                        )
-
-                        StatsCard(
-                            title = "Workout Time",
-                            value = todayStats["Workout"] ?: 0,
-                            goal = 60,
-                            unit = "min",
-                            icon = Icons.Default.FitnessCenter,
-                            color = FitnessBlue,
-                            progress = (todayStats["Workout"] ?: 0).toFloat() / 60f
-                        )
-                    }
+                    StatCard(
+                        title = "Steps",
+                        value = todayStats["Steps"] ?: 0,
+                        goal = userPreferences.dailyStepGoal,
+                        icon = Icons.Default.DirectionsWalk,
+                        color = FitnessGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        title = "Calories",
+                        value = todayStats["Calories"] ?: 0,
+                        goal = userPreferences.dailyCalorieGoal,
+                        icon = Icons.Default.LocalFireDepartment,
+                        color = FitnessOrange,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
@@ -147,8 +127,7 @@ fun HomeScreen(
                 Text(
                     "Quick Actions",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
+                    fontWeight = FontWeight.Bold
                 )
             }
 
@@ -158,79 +137,101 @@ fun HomeScreen(
                 ) {
                     item {
                         QuickActionCard(
-                            title = "View Log",
-                            icon = Icons.Default.Assessment,
+                            title = "Activity Log",
+                            icon = Icons.Default.List,
+                            color = FitnessBlue,
                             onClick = onNavigateToActivityLog
                         )
                     }
                     item {
                         QuickActionCard(
-                            title = "Add Activity",
-                            icon = Icons.Default.Add,
-                            onClick = onNavigateToAddActivity
+                            title = "Exercises",
+                            icon = Icons.Default.FitnessCenter,
+                            color = FitnessPurple,
+                            onClick = onNavigateToExercises
                         )
                     }
                     item {
                         QuickActionCard(
                             title = "Profile",
                             icon = Icons.Default.Person,
+                            color = FitnessGreen,
                             onClick = onNavigateToProfile
                         )
                     }
                 }
             }
 
-            // Tips section
+            // Recent activities
             item {
-                Text(
-                    "Fitness Tips",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            if (uiState.tipsLoading) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Recent Activities",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = onNavigateToActivityLog) {
+                        Text("See All")
                     }
                 }
             }
 
-            if (uiState.tipsError != null) {
+            if (uiState.activities.isEmpty()) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.ErrorOutline, "Error")
-                            Column {
-                                Text(
-                                    "Failed to load tips",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                TextButton(onClick = { viewModel.loadTips() }) {
-                                    Text("Retry")
-                                }
-                            }
+                            Icon(
+                                Icons.Default.EventNote,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "No activities yet",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                "Start tracking your fitness journey!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
+            } else {
+                items(uiState.activities.take(3)) { activity ->
+                    RecentActivityItem(activity)
+                }
             }
 
-            items(uiState.tips.take(3)) { tip ->
-                TipCard(tip.title, tip.body)
+            // Tips section
+            if (uiState.tips.isNotEmpty()) {
+                item {
+                    Text(
+                        "Fitness Tips",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                items(uiState.tips.take(2)) { tip ->
+                    TipCard(tip.title, tip.body)
+                }
             }
+
+            item { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
 }
@@ -240,7 +241,7 @@ fun WelcomeCard(userName: String) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .semantics { contentDescription = "Welcome card for $userName" },
+            .semantics { contentDescription = "Welcome card" },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         )
@@ -254,10 +255,10 @@ fun WelcomeCard(userName: String) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 "Let's achieve your fitness goals today!",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
@@ -265,76 +266,57 @@ fun WelcomeCard(userName: String) {
 }
 
 @Composable
-fun StatsCard(
+fun StatCard(
     title: String,
     value: Int,
     goal: Int,
-    unit: String,
     icon: ImageVector,
     color: Color,
-    progress: Float
+    modifier: Modifier = Modifier
 ) {
-    // Animated progress
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-        label = "progress"
-    )
+    val progress = if (goal > 0) (value.toFloat() / goal.toFloat()).coerceIn(0f, 1f) else 0f
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics {
-                contentDescription = "$title: $value out of $goal $unit"
-            }
+        modifier = modifier.semantics { contentDescription = "$title stat card" }
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        tint = color,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Column {
-                        Text(
-                            title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            "$value / $goal $unit",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
                 Text(
-                    "${(animatedProgress * 100).toInt()}%",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = color
+                    title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                value.toString(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
 
             LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp),
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
                 color = color,
+            )
+
+            Text(
+                "Goal: $goal",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -344,72 +326,134 @@ fun StatsCard(
 fun QuickActionCard(
     title: String,
     icon: ImageVector,
+    color: Color,
     onClick: () -> Unit
 ) {
-    // Pulse animation
-    var scale by remember { mutableStateOf(1f) }
-
     Card(
         onClick = onClick,
         modifier = Modifier
-            .size(120.dp)
-            .scale(scale)
-            .semantics { contentDescription = "$title button" }
+            .width(140.dp)
+            .semantics { contentDescription = "$title quick action" }
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = color.copy(alpha = 0.2f)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .size(32.dp)
+                )
+            }
             Text(
                 title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
 }
 
 @Composable
-fun TipCard(title: String, description: String) {
+fun RecentActivityItem(activity: com.example.smartfit.data.local.ActivityEntity) {
+    val icon = when (activity.type) {
+        "Steps" -> Icons.Default.DirectionsRun
+        "Workout" -> Icons.Default.FitnessCenter
+        "Calories" -> Icons.Default.Whatshot
+        else -> Icons.Default.SportsScore
+    }
+    val color = when (activity.type) {
+        "Steps" -> FitnessGreen
+        "Workout" -> FitnessBlue
+        "Calories" -> FitnessOrange
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = color.copy(alpha = 0.2f)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .size(24.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    activity.type,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "${activity.value}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = color
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TipCard(title: String, body: String) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .semantics { contentDescription = "Fitness tip: $title" }
+            .semantics { contentDescription = "Fitness tip" }
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    Icons.Default.Star,
+                    Icons.Default.Lightbulb,
                     contentDescription = null,
-                    tint = FitnessOrange
+                    tint = FitnessOrange,
+                    modifier = Modifier.size(20.dp)
                 )
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
             )
         }
     }
 }
+
