@@ -23,6 +23,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class UserPreferences(private val context: Context) {
 
     companion object {
+        private const val DEMO_PROFILE_ID = "smartfit-demo"
+        private const val DEMO_DISPLAY_NAME = "SmartFit Demo"
         private val DARK_THEME = booleanPreferencesKey("dark_theme")
         private val DAILY_STEP_GOAL = intPreferencesKey("daily_step_goal")
         private val DAILY_CALORIE_GOAL = intPreferencesKey("daily_calorie_goal")
@@ -227,6 +229,17 @@ class UserPreferences(private val context: Context) {
             email = sanitizedEmail
         )
 
+        upsertProfile(profile)
+        setActiveProfileId(profile.id)
+        return profile
+    }
+
+    suspend fun upsertDemoProfile(): StoredProfile {
+        val profile = StoredProfile(
+            id = DEMO_PROFILE_ID,
+            displayName = DEMO_DISPLAY_NAME,
+            email = null
+        )
         upsertProfile(profile)
         setActiveProfileId(profile.id)
         return profile

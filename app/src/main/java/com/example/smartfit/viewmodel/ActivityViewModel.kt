@@ -296,6 +296,27 @@ class ActivityViewModel(
         _uiState.update { it.copy(authLoading = true, authError = null) }
     }
 
+    fun loginAsDemo() {
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(authLoading = true, authError = null) }
+                val profile = userPreferences.upsertDemoProfile()
+                userPreferences.setFirstLaunchComplete()
+                userPreferences.setLoggedIn(true)
+                userPreferences.setUserName(profile.displayName)
+                _uiState.update { it.copy(authLoading = false, authError = null) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Demo login failed", e)
+                _uiState.update {
+                    it.copy(
+                        authLoading = false,
+                        authError = e.message ?: "Unable to start SmartFit demo mode right now."
+                    )
+                }
+            }
+        }
+    }
+
     fun completeGoogleSignIn(accountId: String?, displayName: String?, email: String?) {
         viewModelScope.launch {
             try {

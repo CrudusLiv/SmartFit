@@ -28,6 +28,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,7 +61,8 @@ fun ProfilePickerScreen(
     isLoading: Boolean,
     errorMessage: String?,
     onProfileActivated: () -> Unit,
-    onGoogleSignIn: () -> Unit
+    onGoogleSignIn: () -> Unit,
+    onDemoLogin: () -> Unit
 ) {
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn) {
@@ -136,6 +138,14 @@ fun ProfilePickerScreen(
                         Text("Continue with Google Fit")
                     }
 
+                    OutlinedButton(
+                        onClick = onDemoLogin,
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Try SmartFit demo (no Google Fit)")
+                    }
+
                     if (sortedProfiles.isEmpty()) {
                         Text(
                             text = "Sign in to create your SmartFit profile and start tracking.",
@@ -143,6 +153,11 @@ fun ProfilePickerScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Text(
+                        text = "Demo mode uses sample data and will not sync with your Google Fit account.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     if (!errorMessage.isNullOrEmpty()) {
                         Text(
                             text = errorMessage,
@@ -346,6 +361,10 @@ fun LoginScreen(
         isLoading = uiState.authLoading,
         errorMessage = uiState.authError,
         onProfileActivated = onLoginSuccess,
-        onGoogleSignIn = triggerGoogleSignIn
+        onGoogleSignIn = triggerGoogleSignIn,
+        onDemoLogin = {
+            viewModel.clearError()
+            viewModel.loginAsDemo()
+        }
     )
 }
