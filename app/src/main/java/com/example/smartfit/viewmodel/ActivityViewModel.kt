@@ -3,6 +3,7 @@ package com.example.smartfit.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.smartfit.data.datastore.StoredProfile
 import com.example.smartfit.data.datastore.UserPreferences
 import com.example.smartfit.data.local.ActivityEntity
 import com.example.smartfit.data.model.WorkoutSuggestion
@@ -52,7 +53,9 @@ data class UserPreferencesState(
     val userWeight: Float = 70f,
     val userHeight: Float = 170f,
     val isFirstLaunch: Boolean = true,
-    val isLoggedIn: Boolean = false
+    val isLoggedIn: Boolean = false,
+    val activeProfileId: String? = null,
+    val savedProfiles: List<StoredProfile> = emptyList()
 )
 
 class ActivityViewModel(
@@ -75,7 +78,9 @@ class ActivityViewModel(
         userPreferences.userWeight,
         userPreferences.userHeight,
         userPreferences.isFirstLaunch,
-        userPreferences.isLoggedIn
+        userPreferences.isLoggedIn,
+        userPreferences.activeProfileId,
+        userPreferences.savedProfiles
     ) { values ->
         UserPreferencesState(
             darkTheme = values[0] as Boolean,
@@ -85,7 +90,9 @@ class ActivityViewModel(
             userWeight = values[4] as Float,
             userHeight = values[5] as Float,
             isFirstLaunch = values[6] as Boolean,
-            isLoggedIn = values[7] as Boolean
+            isLoggedIn = values[7] as Boolean,
+            activeProfileId = values[8] as String?,
+            savedProfiles = values[9] as List<StoredProfile>
         )
     }.stateIn(
         scope = viewModelScope,
@@ -285,7 +292,10 @@ class ActivityViewModel(
     }
 
     fun setUserName(name: String) {
-        viewModelScope.launch { userPreferences.setUserName(name) }
+        viewModelScope.launch {
+            userPreferences.setUserName(name)
+            userPreferences.updateProfileName(userPreferencesState.value.activeProfileId, name)
+        }
     }
 
     fun setUserWeight(weight: Float) {
@@ -327,10 +337,13 @@ class ActivityViewModel(
             _uiState.update { it.copy(authLoading = true, authError = null) }
 
             try {
-                userPreferences.setLoggedIn(true)
+                val profile = userPreferences.normalizeAndCreateProfile(
+                    rawEmail = email,
+                    fallbackName = email.substringBefore('@')
+                )
                 userPreferences.setFirstLaunchComplete()
-                // Use name portion before @ as default display name when available.
-                email.substringBefore('@').takeIf { it.isNotBlank() }?.let { userPreferences.setUserName(it) }
+                userPreferences.setLoggedIn(true)
+                userPreferences.setUserName(profile.displayName)
                 _uiState.update { it.copy(authLoading = false, authError = null) }
             } catch (e: Exception) {
                 Log.e(TAG, "Login failed", e)
@@ -344,10 +357,34 @@ class ActivityViewModel(
         }
     }
 
+    fun loginWithProfile(profileId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(authLoading = true, authError = null) }
+            try {
+                val profile = userPreferences.getProfileById(profileId)
+                    ?: throw IllegalStateException("Profile not found")
+                userPreferences.setUserName(profile.displayName)
+                userPreferences.setActiveProfileId(profile.id)
+                userPreferences.setLoggedIn(true)
+                userPreferences.setFirstLaunchComplete()
+                _uiState.update { it.copy(authLoading = false) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Profile selection failed", e)
+                _uiState.update {
+                    it.copy(
+                        authLoading = false,
+                        authError = e.message ?: "Unable to activate that profile right now."
+                    )
+                }
+            }
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             try {
                 userPreferences.setLoggedIn(false)
+                userPreferences.setActiveProfileId(null)
             } catch (e: Exception) {
                 Log.e(TAG, "Logout failed", e)
                 _uiState.update { it.copy(authError = e.message) }
