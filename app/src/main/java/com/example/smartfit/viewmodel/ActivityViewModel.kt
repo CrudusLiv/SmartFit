@@ -8,7 +8,6 @@ import com.example.smartfit.data.datastore.UserPreferences
 import com.example.smartfit.data.local.ActivityEntity
 import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.data.remote.ExerciseInfo
-import com.example.smartfit.data.remote.Post
 import com.example.smartfit.data.repository.ActivityRepository
 import com.example.smartfit.data.repository.Result
 import kotlinx.coroutines.Dispatchers
@@ -34,9 +33,6 @@ data class ActivityUiState(
     val workoutSuggestions: List<WorkoutSuggestion> = emptyList(),
     val suggestionsLoading: Boolean = false,
     val suggestionsError: String? = null,
-    val tips: List<Post> = emptyList(),
-    val tipsLoading: Boolean = false,
-    val tipsError: String? = null,
     val exercises: List<ExerciseInfo> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -102,7 +98,6 @@ class ActivityViewModel(
 
     init {
         observeActivities()
-        loadTips()
     }
 
     private fun observeActivities() {
@@ -131,32 +126,9 @@ class ActivityViewModel(
         }
     }
 
-    fun loadTips(limit: Int = 10) {
-        viewModelScope.launch {
-            repository.getTipsFromNetwork(limit).collect { result ->
-                when (result) {
-                    is Result.Loading -> _uiState.update { it.copy(tipsLoading = true, tipsError = null) }
-                    is Result.Success -> _uiState.update {
-                        it.copy(
-                            tips = result.data,
-                            tipsLoading = false,
-                            tipsError = null
-                        )
-                    }
-                    is Result.Error -> _uiState.update {
-                        it.copy(
-                            tipsLoading = false,
-                            tipsError = result.exception.message
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     fun loadExercises(limit: Int = 20, offset: Int = 0) {
         viewModelScope.launch {
-            repository.getExercisesFromWger(limit, offset).collect { result ->
+            repository.getExercisesFromGoogleFit(limit, offset).collect { result ->
                 when (result) {
                     is Result.Loading -> _uiState.update { it.copy(isLoading = true, error = null) }
                     is Result.Success -> _uiState.update {
@@ -190,8 +162,7 @@ class ActivityViewModel(
                         it.copy(
                             workoutSuggestions = result.data,
                             suggestionsLoading = false,
-                            suggestionsError = null
-                        )
+                            suggestionsError = null)
                     }
 
                     is Result.Error -> _uiState.update {
@@ -314,7 +285,6 @@ class ActivityViewModel(
         _uiState.update {
             it.copy(
                 error = null,
-                tipsError = null,
                 activitiesError = null,
                 suggestionsError = null,
                 authError = null
@@ -322,61 +292,37 @@ class ActivityViewModel(
         }
     }
 
-    fun login(email: String, password: String) {
+    fun beginGoogleSignIn() {
+        _uiState.update { it.copy(authLoading = true, authError = null) }
+    }
+
+    fun completeGoogleSignIn(accountId: String?, displayName: String?, email: String?) {
         viewModelScope.launch {
-            if (email.isBlank() || password.length < 4) {
-                _uiState.update {
-                    it.copy(
-                        authLoading = false,
-                        authError = "Please enter a valid email and a password with at least 4 characters."
-                    )
-                }
-                return@launch
-            }
-
-            _uiState.update { it.copy(authLoading = true, authError = null) }
-
             try {
-                val profile = userPreferences.normalizeAndCreateProfile(
-                    rawEmail = email,
-                    fallbackName = email.substringBefore('@')
-                )
+                _uiState.update { it.copy(authLoading = true, authError = null) }
+                val profile = userPreferences.upsertProfileFromGoogleAccount(accountId, displayName, email)
                 userPreferences.setFirstLaunchComplete()
                 userPreferences.setLoggedIn(true)
                 userPreferences.setUserName(profile.displayName)
                 _uiState.update { it.copy(authLoading = false, authError = null) }
             } catch (e: Exception) {
-                Log.e(TAG, "Login failed", e)
+                Log.e(TAG, "Google login failed", e)
                 _uiState.update {
                     it.copy(
                         authLoading = false,
-                        authError = e.message ?: "Unable to complete login. Try again."
+                        authError = e.message ?: "Unable to sign in with Google right now."
                     )
                 }
             }
         }
     }
 
-    fun loginWithProfile(profileId: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(authLoading = true, authError = null) }
-            try {
-                val profile = userPreferences.getProfileById(profileId)
-                    ?: throw IllegalStateException("Profile not found")
-                userPreferences.setUserName(profile.displayName)
-                userPreferences.setActiveProfileId(profile.id)
-                userPreferences.setLoggedIn(true)
-                userPreferences.setFirstLaunchComplete()
-                _uiState.update { it.copy(authLoading = false) }
-            } catch (e: Exception) {
-                Log.e(TAG, "Profile selection failed", e)
-                _uiState.update {
-                    it.copy(
-                        authLoading = false,
-                        authError = e.message ?: "Unable to activate that profile right now."
-                    )
-                }
-            }
+    fun handleGoogleSignInFailure(message: String?, isCancelled: Boolean = false) {
+        _uiState.update {
+            it.copy(
+                authLoading = false,
+                authError = if (isCancelled) null else message ?: "Unable to sign in with Google right now."
+            )
         }
     }
 
@@ -385,6 +331,7 @@ class ActivityViewModel(
             try {
                 userPreferences.setLoggedIn(false)
                 userPreferences.setActiveProfileId(null)
+                _uiState.update { it.copy(authLoading = false, authError = null) }
             } catch (e: Exception) {
                 Log.e(TAG, "Logout failed", e)
                 _uiState.update { it.copy(authError = e.message) }

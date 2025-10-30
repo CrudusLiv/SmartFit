@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -44,8 +45,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.viewmodel.ActivityViewModel
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -174,6 +177,7 @@ private fun ExerciseCard(suggestion: WorkoutSuggestion) {
     val secondaryLabel = suggestion.category.takeIf { it.isNotBlank() }
         ?: suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }
     val equipmentLabel = suggestion.equipment.firstOrNull()?.takeUnless { it.equals("Bodyweight", ignoreCase = true) }
+    val metrics = buildExerciseMetrics(suggestion)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -237,6 +241,18 @@ private fun ExerciseCard(suggestion: WorkoutSuggestion) {
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+
+                if (metrics.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        metrics.forEach { metric ->
+                            MetricChip(metric.icon, metric.label)
+                        }
+                    }
                 }
 
                 val muscleTags = suggestion.primaryMuscles
@@ -362,5 +378,51 @@ private fun TagChip(label: String) {
     AssistChip(
         onClick = {},
         label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    )
+}
+
+private data class ExerciseMetric(val icon: ImageVector, val label: String)
+
+private fun buildExerciseMetrics(suggestion: WorkoutSuggestion): List<ExerciseMetric> {
+    val chips = mutableListOf<ExerciseMetric>()
+    if (suggestion.durationMinutes > 0) {
+        chips += ExerciseMetric(Icons.Default.Schedule, "${suggestion.durationMinutes} min")
+    }
+    if (suggestion.calories > 0) {
+        chips += ExerciseMetric(Icons.Default.LocalFireDepartment, "${suggestion.calories} kcal")
+    }
+    suggestion.distanceKm?.takeIf { it > 0.0 }?.let { distance ->
+        chips += ExerciseMetric(Icons.Default.Map, String.format(Locale.getDefault(), "%.1f km", distance))
+    }
+    if (suggestion.steps > 0) {
+        chips += ExerciseMetric(Icons.Default.DirectionsWalk, "${suggestion.steps} steps")
+    }
+    suggestion.averagePaceMinutesPerKm?.takeIf { it > 0.0 }?.let { pace ->
+        chips += ExerciseMetric(Icons.Default.Speed, String.format(Locale.getDefault(), "%.1f min/km", pace))
+    }
+    suggestion.averageHeartRate?.takeIf { it > 0 }?.let { bpm ->
+        chips += ExerciseMetric(Icons.Default.Favorite, "$bpm bpm")
+    }
+    if (suggestion.intensityLabel.isNotBlank()) {
+        chips += ExerciseMetric(Icons.Default.Bolt, suggestion.intensityLabel)
+    }
+    if (suggestion.effortScore > 0) {
+        chips += ExerciseMetric(Icons.Default.ThumbUp, "Score ${suggestion.effortScore}")
+    }
+    return chips.take(8)
+}
+
+@Composable
+private fun MetricChip(icon: ImageVector, label: String) {
+    AssistChip(
+        onClick = {},
+        leadingIcon = {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        colors = AssistChipDefaults.assistChipColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            labelColor = MaterialTheme.colorScheme.primary
+        )
     )
 }

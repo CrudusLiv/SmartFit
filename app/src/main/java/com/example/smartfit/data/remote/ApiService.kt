@@ -1,9 +1,5 @@
 package com.example.smartfit.data.remote
 
-import retrofit2.http.GET
-import retrofit2.http.Query
-
-// Wger API Models (null-safe)
 data class ExerciseInfoResponse(
     val count: Int? = 0,
     val next: String? = null,
@@ -44,25 +40,3 @@ data class ExerciseImage(
     val is_main: Boolean? = null
 )
 
-// JSONPlaceholder API Models
-data class Post(
-    val userId: Int,
-    val id: Int,
-    val title: String,
-    val body: String
-)
-
-interface ApiService {
-    @GET("posts")
-    suspend fun getTips(@Query("_limit") limit: Int = 10): List<Post>
-}
-
-interface WgerApiService {
-    @GET("exerciseinfo/")
-    suspend fun getExercises(
-        @Query("limit") limit: Int = 20,
-        @Query("offset") offset: Int = 0,
-        @Query("language") language: Int = 2,
-        @Query("status") status: Int = 2
-    ): ExerciseInfoResponse
-}

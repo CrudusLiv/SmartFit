@@ -24,7 +24,9 @@ sealed class Screen(val route: String) {
 @Composable
 fun NavGraph(
     navController: NavHostController,
-    viewModel: ActivityViewModel
+    viewModel: ActivityViewModel,
+    onRequestGoogleSignIn: () -> Unit,
+    onRequestGoogleSignOut: () -> Unit
 ) {
     NavHost(
         navController = navController,
@@ -49,7 +51,8 @@ fun NavGraph(
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
-                }
+                },
+                onGoogleSignIn = onRequestGoogleSignIn
             )
         }
 
@@ -110,6 +113,8 @@ fun NavGraph(
                     navController.popBackStack()
                 },
                 onLogout = {
+                    viewModel.logout()
+                    onRequestGoogleSignOut()
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }

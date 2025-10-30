@@ -4,10 +4,9 @@ import android.util.Log
 import com.example.smartfit.data.local.ActivityDao
 import com.example.smartfit.data.local.ActivityEntity
 import com.example.smartfit.data.model.WorkoutSuggestion
-import com.example.smartfit.data.remote.ApiService
 import com.example.smartfit.data.remote.ExerciseInfoResponse
-import com.example.smartfit.data.remote.Post
-import com.example.smartfit.data.remote.WgerApiService
+import com.example.smartfit.google.GoogleFitDataSource
+import com.example.smartfit.google.GoogleFitDataSource.FitWorkout
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -24,8 +23,7 @@ sealed class Result<out T> {
 
 class ActivityRepository(
     private val activityDao: ActivityDao,
-    private val apiService: ApiService,
-    private val wgerApiService: WgerApiService
+    private val googleFitDataSource: GoogleFitDataSource
 ) {
     companion object { private const val TAG = "ActivityRepository" }
 
@@ -57,66 +55,10 @@ class ActivityRepository(
             activityDao.getTotalByTypeAndDateRange(type, startDate, endDate) ?: 0
         }
 
-    fun getTipsFromNetwork(limit: Int = 6): Flow<Result<List<Post>>> = flow {
+    fun getExercisesFromGoogleFit(limit: Int = 20, offset: Int = 0): Flow<Result<ExerciseInfoResponse>> = flow {
         emit(Result.Loading)
         try {
-            val response = wgerApiService.getExercises(
-                limit = (limit * 3).coerceAtLeast(limit),
-                language = 2,
-                status = 2
-            )
-
-            val tips = response.results
-                .asSequence()
-                .mapNotNull { exercise ->
-                    val description = exercise.description?.let(::stripHtml)?.takeIf { it.isNotBlank() }
-                        ?: return@mapNotNull null
-
-                    val title = exercise.name?.takeIf { it.isNotBlank() }
-                        ?: exercise.category?.name?.takeIf { !it.isNullOrBlank() }
-                        ?: "Training Insight"
-
-                    val muscles = exercise.muscles.mapNotNull { it.name ?: it.name_en }
-                    val equipment = exercise.equipment.mapNotNull { it.name }
-
-                    val body = buildString {
-                        append(description)
-                        val summary = listOfNotNull(
-                            muscles.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Focus: ", separator = ", "),
-                            equipment.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Equipment: ", separator = ", ")
-                        )
-                        if (summary.isNotEmpty()) {
-                            append("\n\n")
-                            append(summary.joinToString(separator = " • "))
-                        }
-                    }
-
-                    val id = exercise.id ?: title.hashCode()
-
-                    Post(
-                        userId = 0,
-                        id = id,
-                        title = title,
-                        body = body
-                    )
-                }
-                .distinctBy { it.id }
-                .take(limit)
-                .toList()
-
-            emit(Result.Success(tips))
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching tips", e)
-            emit(Result.Error(e))
-        }
-    }.catch { throwable ->
-        emit(Result.Error(Exception(throwable)))
-    }.flowOn(Dispatchers.IO)
-
-    fun getExercisesFromWger(limit: Int = 20, offset: Int = 0): Flow<Result<ExerciseInfoResponse>> = flow {
-        emit(Result.Loading)
-        try {
-            val response = wgerApiService.getExercises(limit = limit, offset = offset, language = 2, status = 2)
+            val response = googleFitDataSource.fetchExercises(limit = limit, offset = offset)
             emit(Result.Success(response))
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching exercises", e)
@@ -130,39 +72,10 @@ class ActivityRepository(
         emit(Result.Loading)
         try {
             val fetchLimit = (limit * 3).coerceAtLeast(limit)
-            val response = wgerApiService.getExercises(
-                limit = fetchLimit,
-                offset = offset,
-                language = 2,
-                status = 2
-            )
-            val suggestions = response.results
+            val workouts = googleFitDataSource.fetchWorkouts(limit = fetchLimit, offset = offset)
+            val suggestions = workouts
                 .asSequence()
-                .map { exercise ->
-                    val rawImage = exercise.images.firstOrNull { it.is_main == true }?.image
-                        ?: exercise.images.firstOrNull { !it.image.isNullOrBlank() }?.image
-                    val imageUrl = rawImage?.let { image ->
-                        if (image.startsWith("http")) image else "https://wger.de$image"
-                    }
-                    val description = exercise.description?.let(::stripHtml).orEmpty()
-                    val muscles = exercise.muscles
-                        .mapNotNull { formatLabel(it.name ?: it.name_en) }
-                        .ifEmpty { listOf("Full Body") }
-                    val equipment = exercise.equipment
-                        .mapNotNull { formatLabel(it.name) }
-                        .ifEmpty { listOf("Bodyweight") }
-                    val categoryName = formatLabel(exercise.category?.name).orEmpty().ifBlank { "General Fitness" }
-                    WorkoutSuggestion(
-                        id = exercise.id ?: exercise.hashCode(),
-                        name = resolveDisplayName(exercise.name, muscles, equipment, categoryName),
-                        category = categoryName,
-                        primaryMuscles = muscles,
-                        equipment = equipment,
-                        imageUrl = imageUrl,
-                        description = resolveDescription(description, muscles, equipment, categoryName)
-                    )
-                }
-                .filter { it.description.isNotBlank() }
+                .map(::mapWorkoutToSuggestion)
                 .distinctBy { it.id }
                 .take(limit)
                 .toList()
@@ -204,12 +117,6 @@ class ActivityRepository(
     }
 }
 
-private fun stripHtml(raw: String): String = raw
-    .replace(Regex("<[^>]*>"), "")
-    .replace("\n", " ")
-    .replace(Regex("\\s+"), " ")
-    .trim()
-
 private fun formatLabel(raw: String?): String? {
     val trimmed = raw?.trim().orEmpty()
     if (trimmed.isBlank()) return null
@@ -222,36 +129,60 @@ private fun formatLabel(raw: String?): String? {
         }
 }
 
-private fun resolveDisplayName(
-    rawName: String?,
-    muscles: List<String>,
-    equipment: List<String>,
-    category: String
-): String {
-    val cleaned = rawName?.trim().orEmpty()
-    if (cleaned.isNotBlank()) return cleaned
+private fun mapWorkoutToSuggestion(workout: FitWorkout): WorkoutSuggestion {
+    val muscles = workout.focusAreas.mapNotNull(::formatLabel).ifEmpty { listOf(formatLabel(workout.activity) ?: "General Fitness") }
+    val equipment = workout.equipment.mapNotNull(::formatLabel).ifEmpty { listOf("Bodyweight") }
+    val description = buildWorkoutDescription(workout)
 
-    val focus = muscles.firstOrNull()?.takeIf { it.isNotBlank() } ?: category
-    val gear = equipment.firstOrNull()?.takeUnless { it.equals("Bodyweight", ignoreCase = true) }
-
-    val parts = mutableListOf<String>()
-    if (!focus.isNullOrBlank()) parts += focus
-    if (!gear.isNullOrBlank()) parts += gear
-    if (parts.isEmpty() && category.isNotBlank()) parts += category
-
-    return parts.joinToString(" • ").ifBlank { "Signature Training" }
+    return WorkoutSuggestion(
+        id = workout.id,
+        name = workout.title.ifBlank { formatLabel(workout.activity) ?: "SmartFit Session" },
+        category = formatLabel(workout.activity).orEmpty().ifBlank { workout.intensityLabel },
+        primaryMuscles = muscles,
+        equipment = equipment,
+        imageUrl = null,
+        description = description,
+        durationMinutes = workout.durationMinutes,
+        calories = workout.calories,
+        distanceKm = workout.distanceKm,
+        steps = workout.steps,
+        startTimeMillis = workout.startTimeMillis,
+        intensityLabel = workout.intensityLabel,
+        effortScore = workout.effortScore,
+        averageHeartRate = workout.averageHeartRate,
+        maxHeartRate = workout.maxHeartRate,
+        averagePaceMinutesPerKm = workout.averagePaceMinutesPerKm
+    )
 }
 
-private fun resolveDescription(
-    rawDescription: String,
-    muscles: List<String>,
-    equipment: List<String>,
-    category: String
-): String {
-    val cleaned = rawDescription.trim()
-    if (cleaned.isNotBlank()) return cleaned
+private fun buildWorkoutDescription(workout: FitWorkout): String {
+    val metrics = mutableListOf<String>()
+    metrics += "${workout.durationMinutes} min"
+    if ((workout.distanceKm ?: 0.0) > 0.0) {
+        metrics += String.format(Locale.getDefault(), "%.2f km", workout.distanceKm)
+    }
+    if (workout.steps > 0) {
+        metrics += "${workout.steps} steps"
+    }
+    if (workout.calories > 0) {
+        metrics += "${workout.calories} kcal"
+    }
+    workout.averagePaceMinutesPerKm?.takeIf { it > 0.0 }?.let { pace ->
+        metrics += String.format(Locale.getDefault(), "%.1f min/km", pace)
+    }
+    workout.averageHeartRate?.takeIf { it > 0 }?.let { bpm ->
+        metrics += "$bpm bpm avg"
+    }
 
-    val focus = muscles.takeIf { it.isNotEmpty() }?.joinToString(" & ") ?: category
-    val gear = equipment.firstOrNull() ?: "Bodyweight"
-    return "$focus session using $gear work. Control the tempo and keep your core engaged throughout."
+    val builder = StringBuilder()
+    builder.append(workout.intensityLabel)
+    if (metrics.isNotEmpty()) {
+        builder.append(" • ").append(metrics.joinToString(" • "))
+    }
+
+    workout.notes?.takeIf { it.isNotBlank() }?.let { note ->
+        builder.append('\n').append(note.trim())
+    }
+
+    return builder.toString()
 }

@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -194,6 +195,38 @@ class UserPreferences(private val context: Context) {
             displayName = displayName,
             email = trimmedEmail.ifBlank { null }
         )
+        upsertProfile(profile)
+        setActiveProfileId(profile.id)
+        return profile
+    }
+
+    suspend fun upsertProfileFromGoogleAccount(
+        accountId: String?,
+        displayName: String?,
+        email: String?
+    ): StoredProfile {
+        val sanitizedEmail = email?.trim()?.takeIf { it.isNotBlank() }
+        val normalizedId = when {
+            !accountId.isNullOrBlank() -> accountId
+            !sanitizedEmail.isNullOrBlank() -> sanitizedEmail.lowercase(Locale.getDefault())
+            !displayName.isNullOrBlank() -> displayName.lowercase(Locale.getDefault())
+                .replace("\\s+".toRegex(), "_")
+            else -> "smartfit-${UUID.randomUUID()}"
+        }
+
+        val resolvedDisplayName = when {
+            !displayName.isNullOrBlank() -> displayName
+            !sanitizedEmail.isNullOrBlank() -> sanitizedEmail.substringBefore('@')
+                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+            else -> "SmartFit Member"
+        }
+
+        val profile = StoredProfile(
+            id = normalizedId,
+            displayName = resolvedDisplayName,
+            email = sanitizedEmail
+        )
+
         upsertProfile(profile)
         setActiveProfileId(profile.id)
         return profile

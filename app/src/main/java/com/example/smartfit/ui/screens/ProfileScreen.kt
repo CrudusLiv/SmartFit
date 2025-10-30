@@ -294,10 +294,7 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedButton(
-                onClick = {
-                    viewModel.logout()
-                    onLogout()
-                },
+                onClick = onLogout,
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics { contentDescription = "Log out button" }

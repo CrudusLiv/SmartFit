@@ -10,5 +10,15 @@ data class WorkoutSuggestion(
     val primaryMuscles: List<String>,
     val equipment: List<String>,
     val imageUrl: String?,
-    val description: String
+    val description: String,
+    val durationMinutes: Int,
+    val calories: Int,
+    val distanceKm: Double?,
+    val steps: Int,
+    val startTimeMillis: Long?,
+    val intensityLabel: String,
+    val effortScore: Int,
+    val averageHeartRate: Int?,
+    val maxHeartRate: Int?,
+    val averagePaceMinutesPerKm: Double?
 )
