@@ -1,6 +1,7 @@
 package com.example.smartfit.data.remote
 
 import android.util.Log
+import com.example.smartfit.BuildConfig
 import com.google.gson.GsonBuilder
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -13,7 +14,6 @@ object NetworkModule {
     private const val TAG = "NetworkModule"
     private const val BASE_URL = "https://jsonplaceholder.typicode.com/"
     private const val WGER_BASE_URL = "https://wger.de/api/v2/"
-    
 
     private val gson = GsonBuilder()
         .setLenient()
@@ -25,10 +25,12 @@ object NetworkModule {
 
     private val auth: Interceptor = Interceptor { chain ->
         val req = chain.request()
-        val newReq = req.newBuilder()
-            .header("Authorization", "Token $WGER_TOKEN")
-            .build()
-        chain.proceed(newReq)
+        val builder = req.newBuilder()
+        val token = BuildConfig.WGER_TOKEN
+        if (token.isNotBlank()) {
+            builder.header("Authorization", "Token $token")
+        }
+        chain.proceed(builder.build())
     }
 
     private val defaultClient: OkHttpClient = OkHttpClient.Builder()

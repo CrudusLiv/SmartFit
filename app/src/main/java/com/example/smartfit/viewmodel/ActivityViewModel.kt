@@ -39,7 +39,9 @@ data class ActivityUiState(
     val exercises: List<ExerciseInfo> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val totalCount: Int = 0
+    val totalCount: Int = 0,
+    val authLoading: Boolean = false,
+    val authError: String? = null
 )
 
 data class UserPreferencesState(
@@ -49,7 +51,8 @@ data class UserPreferencesState(
     val userName: String = "",
     val userWeight: Float = 70f,
     val userHeight: Float = 170f,
-    val isFirstLaunch: Boolean = true
+    val isFirstLaunch: Boolean = true,
+    val isLoggedIn: Boolean = false
 )
 
 class ActivityViewModel(
@@ -71,7 +74,8 @@ class ActivityViewModel(
         userPreferences.userName,
         userPreferences.userWeight,
         userPreferences.userHeight,
-        userPreferences.isFirstLaunch
+        userPreferences.isFirstLaunch,
+        userPreferences.isLoggedIn
     ) { values ->
         UserPreferencesState(
             darkTheme = values[0] as Boolean,
@@ -80,7 +84,8 @@ class ActivityViewModel(
             userName = values[3] as String,
             userWeight = values[4] as Float,
             userHeight = values[5] as Float,
-            isFirstLaunch = values[6] as Boolean
+            isFirstLaunch = values[6] as Boolean,
+            isLoggedIn = values[7] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -91,7 +96,6 @@ class ActivityViewModel(
     init {
         observeActivities()
         loadTips()
-        loadWorkoutSuggestions()
     }
 
     private fun observeActivities() {
@@ -302,8 +306,52 @@ class ActivityViewModel(
                 error = null,
                 tipsError = null,
                 activitiesError = null,
-                suggestionsError = null
+                suggestionsError = null,
+                authError = null
             )
+        }
+    }
+
+    fun login(email: String, password: String) {
+        viewModelScope.launch {
+            if (email.isBlank() || password.length < 4) {
+                _uiState.update {
+                    it.copy(
+                        authLoading = false,
+                        authError = "Please enter a valid email and a password with at least 4 characters."
+                    )
+                }
+                return@launch
+            }
+
+            _uiState.update { it.copy(authLoading = true, authError = null) }
+
+            try {
+                userPreferences.setLoggedIn(true)
+                userPreferences.setFirstLaunchComplete()
+                // Use name portion before @ as default display name when available.
+                email.substringBefore('@').takeIf { it.isNotBlank() }?.let { userPreferences.setUserName(it) }
+                _uiState.update { it.copy(authLoading = false, authError = null) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Login failed", e)
+                _uiState.update {
+                    it.copy(
+                        authLoading = false,
+                        authError = e.message ?: "Unable to complete login. Try again."
+                    )
+                }
+            }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            try {
+                userPreferences.setLoggedIn(false)
+            } catch (e: Exception) {
+                Log.e(TAG, "Logout failed", e)
+                _uiState.update { it.copy(authError = e.message) }
+            }
         }
     }
 

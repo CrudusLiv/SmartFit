@@ -1,8 +1,6 @@
 package com.example.smartfit.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,6 +10,8 @@ import com.example.smartfit.ui.screens.*
 import com.example.smartfit.viewmodel.ActivityViewModel
 
 sealed class Screen(val route: String) {
+    object Splash : Screen("splash")
+    object Login : Screen("login")
     object Home : Screen("home")
     object ActivityLog : Screen("activity_log")
     object AddEditActivity : Screen("add_edit_activity/{activityId}") {
@@ -28,8 +28,31 @@ fun NavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = Screen.Splash.route
     ) {
+        composable(Screen.Splash.route) {
+            SplashScreen(
+                viewModel = viewModel,
+                onNavigationResolved = { isLoggedIn ->
+                    val targetRoute = if (isLoggedIn) Screen.Home.route else Screen.Login.route
+                    navController.navigate(targetRoute) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Login.route) {
+            LoginScreen(
+                viewModel = viewModel,
+                onLoginSuccess = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Screen.Home.route) {
             HomeScreen(
                 viewModel = viewModel,
@@ -85,6 +108,11 @@ fun NavGraph(
                 viewModel = viewModel,
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
                 }
             )
         }

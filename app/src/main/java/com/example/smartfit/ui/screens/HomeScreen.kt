@@ -38,8 +38,8 @@ fun HomeScreen(
     val userPreferences by viewModel.userPreferencesState.collectAsState()
     val todayStats by viewModel.getTodayStats().collectAsState(initial = emptyMap())
 
-    LaunchedEffect(Unit) {
-        if (uiState.workoutSuggestions.isEmpty()) {
+    LaunchedEffect(userPreferences.isLoggedIn) {
+        if (userPreferences.isLoggedIn && uiState.workoutSuggestions.isEmpty()) {
             viewModel.loadWorkoutSuggestions(limit = 8)
         }
     }

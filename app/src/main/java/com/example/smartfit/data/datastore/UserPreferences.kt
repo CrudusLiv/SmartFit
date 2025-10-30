@@ -24,6 +24,7 @@ class UserPreferences(private val context: Context) {
         private val USER_WEIGHT = floatPreferencesKey("user_weight")
         private val USER_HEIGHT = floatPreferencesKey("user_height")
         private val IS_FIRST_LAUNCH = booleanPreferencesKey("is_first_launch")
+        private val IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
     }
 
     val darkTheme: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -52,6 +53,10 @@ class UserPreferences(private val context: Context) {
 
     val isFirstLaunch: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[IS_FIRST_LAUNCH] ?: true
+    }
+
+    val isLoggedIn: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[IS_LOGGED_IN] ?: false
     }
 
     suspend fun setDarkTheme(enabled: Boolean) {
@@ -93,6 +98,12 @@ class UserPreferences(private val context: Context) {
     suspend fun setFirstLaunchComplete() {
         context.dataStore.edit { preferences ->
             preferences[IS_FIRST_LAUNCH] = false
+        }
+    }
+
+    suspend fun setLoggedIn(isLoggedIn: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[IS_LOGGED_IN] = isLoggedIn
         }
     }
 }

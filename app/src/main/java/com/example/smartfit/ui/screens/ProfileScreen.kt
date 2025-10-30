@@ -21,7 +21,8 @@ import com.example.smartfit.viewmodel.ActivityViewModel
 @Composable
 fun ProfileScreen(
     viewModel: ActivityViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onLogout: () -> Unit
 ) {
     val userPreferences by viewModel.userPreferencesState.collectAsState()
 
@@ -291,6 +292,20 @@ fun ProfileScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = {
+                    viewModel.logout()
+                    onLogout()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Log out button" }
+            ) {
+                Icon(Icons.Default.Logout, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Log Out")
+            }
         }
     }
 }
