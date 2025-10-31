@@ -9,9 +9,9 @@ val Secondary = Color(0xFF03DAC6)
 val SecondaryVariant = Color(0xFF018786)
 
 // Fitness-themed colors
-val FitnessGreen = Color(0xFF4CAF50)
+val FitnessGreen = Color(0xFF80EE84)
 val FitnessBlue = Color(0xFF2196F3)
-val FitnessOrange = Color(0xFFFF9800)
+val FitnessOrange = Color(0xFFFF9122)
 val FitnessRed = Color(0xFFF44336)
 val FitnessPurple = Color(0xFF9C27B0)
 
