@@ -154,158 +154,33 @@ fun HomeScreen(
                 )
             }
 
+            // ✅ Steps + Calories side by side
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Steps Card
                     StatCard(
                         title = "Steps",
                         value = todayStats["Steps"] ?: 0,
                         goal = userPreferences.dailyStepGoal,
                         icon = Icons.Default.DirectionsWalk,
-                        color = FitnessGreen,
+                        color = Color(0xFF22C55E), // FitnessGreen
                         modifier = Modifier
                             .weight(1f)
-                            .height(250.dp) // Increased height
+                            .height(200.dp)
                     )
 
-                    // Calories Card
                     StatCard(
                         title = "Calories",
                         value = todayStats["Calories"] ?: 0,
                         goal = userPreferences.dailyCalorieGoal,
                         icon = Icons.Default.LocalFireDepartment,
-                        color = FitnessOrange,
+                        color = Color(0xFFF97316), // FitnessOrange
                         modifier = Modifier
                             .weight(1f)
-                            .height(250.dp) // Increased height
+                            .height(200.dp)
                     )
-                }
-            }
-
-
-            @Composable
-            fun DonutProgress(
-                progress: Float,
-                color: Color,
-                diameter: Dp = 120.dp,
-                strokeWidth: Dp = 8.dp
-            ) {
-                val animatedProgress by animateFloatAsState(
-                    targetValue = progress.coerceIn(0f, 1f),
-                    animationSpec = tween(durationMillis = 600)
-                )
-
-                Box(modifier = Modifier.size(diameter), contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        // draw scope: `size` is the canvas size in pixels
-                        val strokePx = strokeWidth.toPx()
-                        val diameterPx = size.minDimension
-                        val arcDiameter = diameterPx - strokePx
-                        val topLeft = Offset(
-                            x = (size.width - arcDiameter) / 2f,
-                            y = (size.height - arcDiameter) / 2f
-                        )
-                        val arcSize = Size(arcDiameter, arcDiameter)
-
-                        // Background track
-                        drawArc(
-                            color = color.copy(alpha = 0.2f),
-                            startAngle = -90f,
-                            sweepAngle = 360f,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                        )
-
-                        // Foreground progress arc
-                        drawArc(
-                            color = color,
-                            startAngle = -90f,
-                            sweepAngle = 360f * animatedProgress,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                        )
-                    }
-                }
-            }
-
-            // ------------------------
-// 🟣 Updated StatCard
-// ------------------------
-            @Composable
-            fun StatCard(
-                title: String,
-                value: Int,
-                goal: Int,
-                icon: ImageVector,
-                color: Color,
-                modifier: Modifier = Modifier
-            ) {
-                val progress = if (goal > 0) value.toFloat() / goal else 0f
-                val pctText = "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
-
-                Card(
-                    modifier = modifier
-
-                        .fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2A38)),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        // Title + Icon
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = title,
-                                tint = color,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // 🌀 Donut Progress Circle
-                        Box(contentAlignment = Alignment.Center) {
-                            DonutProgress(progress = progress, color = color, diameter = 120.dp, strokeWidth = 10.dp)
-                            Text(
-                                text = pctText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Goal text
-                        Text(
-                            text = "Goal: $goal",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.LightGray
-                        )
-                    }
                 }
             }
 
@@ -536,51 +411,88 @@ fun StatCard(
     color: Color,
     modifier: Modifier = Modifier
 ) {
-    val progress = if (goal > 0) (value.toFloat() / goal.toFloat()).coerceIn(0f, 1f) else 0f
+    val progress = if (goal > 0) value.toFloat() / goal else 0f
 
     Card(
-        modifier = modifier.semantics { contentDescription = "$title stat card" }
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2A38)),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceEvenly
         ) {
+            // Title & Icon Row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    icon,
-                    contentDescription = null,
+                    imageVector = icon,
+                    contentDescription = title,
                     tint = color,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
                 Text(
-                    title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
 
-            Text(
-                value.toString(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
+            Spacer(modifier = Modifier.height(8.dp))
 
-            LinearProgressIndicator(
-                progress = progress,
-                modifier = Modifier.fillMaxWidth(),
-                color = color,
-            )
+            // ✅ Circular progress tracker
+            DonutProgress(progress = progress, color = color)
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Goal text
             Text(
-                "Goal: $goal",
+                text = "Goal: $goal",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color.LightGray
             )
         }
+    }
+}
+
+@Composable
+fun DonutProgress(progress: Float, color: Color) {
+    Box(
+        modifier = Modifier
+            .size(120.dp)
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Background circle
+        CircularProgressIndicator(
+            progress = 1f,
+            color = color.copy(alpha = 0.2f),
+            strokeWidth = 8.dp,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Foreground (actual progress)
+        CircularProgressIndicator(
+            progress = progress.coerceIn(0f, 1f),
+            color = color,
+            strokeWidth = 8.dp,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Percentage text
+        Text(
+            text = "${(progress * 100).toInt()}%",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
     }
 }
 
@@ -883,3 +795,5 @@ private fun MetricChip(icon: ImageVector, label: String) {
         )
     )
 }
+
+
