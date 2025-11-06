@@ -11,17 +11,37 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.smartfit.ui.navigation.Screen
 import com.example.smartfit.data.datastore.UserPreferences
 import com.example.smartfit.data.local.SmartFitDatabase
 import com.example.smartfit.data.repository.ActivityRepository
@@ -34,9 +54,9 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.fitness.Fitness
 import com.google.android.gms.fitness.data.DataType
-import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 
 class MainActivity : ComponentActivity() {
 
@@ -86,28 +106,66 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         googleSignInClient = createGoogleSignInClient(this)
-    ensureRuntimePermissions()
+        ensureRuntimePermissions()
 
         setContent {
             val userPreferences by viewModel.userPreferencesState.collectAsState()
+            val navController = rememberNavController()
+            val navBackStackEntry by navController.currentBackStackEntryAsState()
+            val currentRoute = navBackStackEntry?.destination?.route
 
-            SmartFitTheme(darkTheme = userPreferences.darkTheme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
-                    LaunchedEffect(userPreferences.isLoggedIn) {
-                        if (userPreferences.isLoggedIn) {
-                            ensureRuntimePermissions { ensureGoogleFitAccess() }
+            val bottomNavItems = remember {
+                listOf(
+                    BottomNavItem(Screen.Home, Icons.Filled.Home, "Home"),
+                    BottomNavItem(Screen.ActivityLog, Icons.Filled.List, "Activity"),
+                    BottomNavItem(Screen.Exercises, Icons.Filled.FitnessCenter, "Exercises"),
+                    BottomNavItem(Screen.Profile, Icons.Filled.Person, "Profile")
+                )
+            }
+
+            val bottomDestinations = remember(bottomNavItems) { bottomNavItems.map { it.screen.route } }
+            val showBottomBar = currentRoute in bottomDestinations
+
+            SmartFitTheme {
+                Scaffold(
+                    bottomBar = {
+                        if (showBottomBar) {
+                            SmartFitBottomBar(
+                                items = bottomNavItems,
+                                currentRoute = currentRoute,
+                                onNavigate = { destination ->
+                                    navController.navigate(destination.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            )
                         }
                     }
-                    NavGraph(
-                        navController = navController,
-                        viewModel = viewModel,
-                        onRequestGoogleSignIn = ::requestGoogleSignIn,
-                        onRequestGoogleSignOut = ::signOutOfGoogle
-                    )
+                ) { innerPadding ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .consumeWindowInsets(innerPadding),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        LaunchedEffect(userPreferences.isLoggedIn) {
+                            if (userPreferences.isLoggedIn) {
+                                ensureRuntimePermissions { ensureGoogleFitAccess() }
+                            }
+                        }
+                        NavGraph(
+                            navController = navController,
+                            viewModel = viewModel,
+                            onRequestGoogleSignIn = ::requestGoogleSignIn,
+                            onRequestGoogleSignOut = ::signOutOfGoogle,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
         }
@@ -236,5 +294,39 @@ class MainActivity : ComponentActivity() {
         private const val RC_SIGN_IN = 1001
         private const val RC_FIT_PERMISSIONS = 1002
         private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.ACTIVITY_RECOGNITION)
+    }
+}
+
+private data class BottomNavItem(
+    val screen: Screen,
+    val icon: ImageVector,
+    val label: String
+)
+
+@Composable
+private fun SmartFitBottomBar(
+    items: List<BottomNavItem>,
+    currentRoute: String?,
+    onNavigate: (Screen) -> Unit
+) {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+        items.forEach { item ->
+            val selected = currentRoute == item.screen.route
+            NavigationBarItem(
+                modifier = Modifier.testTag("nav_${item.screen.route}"),
+                selected = selected,
+                onClick = { if (!selected) onNavigate(item.screen) },
+                icon = { Icon(item.icon, contentDescription = item.label) },
+                label = { Text(item.label) },
+                alwaysShowLabel = false,
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                    selectedTextColor = MaterialTheme.colorScheme.onPrimary,
+                    indicatorColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            )
+        }
     }
 }

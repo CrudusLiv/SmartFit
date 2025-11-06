@@ -1,16 +1,29 @@
 // kotlin
 package com.example.smartfit.ui.screens
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FitnessCenter
@@ -20,8 +33,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -30,7 +45,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,13 +72,14 @@ import java.util.Locale
 import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.ui.theme.*
 import com.example.smartfit.viewmodel.ActivityViewModel
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PaintingStyle.Companion.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.window.Dialog
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,36 +87,30 @@ fun HomeScreen(
     viewModel: ActivityViewModel,
     onNavigateToActivityLog: () -> Unit,
     onNavigateToAddActivity: () -> Unit,
-    onNavigateToProfile: () -> Unit,
-    onNavigateToExercises: () -> Unit
+    onNavigateToProfile: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userPreferences by viewModel.userPreferencesState.collectAsState()
     val todayStats by viewModel.getTodayStats().collectAsState(initial = emptyMap())
+    var selectedSuggestion by remember { mutableStateOf<WorkoutSuggestion?>(null) }
+
+    val steps = (todayStats["Steps"] as? Number)?.toInt() ?: 0
+    val calories = (todayStats["Calories"] as? Number)?.toInt() ?: 0
+    val stepsGoal = userPreferences.dailyStepGoal.coerceAtLeast(0)
+    val caloriesGoal = userPreferences.dailyCalorieGoal.coerceAtLeast(0)
+
+    val progress = remember(steps, calories, stepsGoal, caloriesGoal) {
+        when {
+            stepsGoal > 0 -> steps.toFloat() / stepsGoal
+            caloriesGoal > 0 -> calories.toFloat() / caloriesGoal
+            else -> 0f
+        }.coerceIn(0f, 1f)
+    }
 
     LaunchedEffect(userPreferences.isLoggedIn) {
         if (userPreferences.isLoggedIn && uiState.workoutSuggestions.isEmpty()) {
             viewModel.loadWorkoutSuggestions(limit = 8)
         }
-    }
-
-    // Animation state (moved to composable scope)
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        visible = true
-    }
-
-    // Calculate progress safely from todayStats (moved to composable scope)
-    val progress = remember(todayStats) {
-        // prefer explicit "progress" key if available
-        (todayStats["progress"] as? Number)?.toFloat()
-            ?: run {
-                val current = (todayStats["steps"] as? Number)?.toFloat()
-                    ?: (todayStats["calories"] as? Number)?.toFloat() ?: 0f
-                val goal = (todayStats["stepsGoal"] as? Number)?.toFloat()
-                    ?: (todayStats["caloriesGoal"] as? Number)?.toFloat() ?: 1f
-                if (goal > 0f) (current / goal).coerceIn(0f, 1f) else 0f
-            }
     }
 
     Scaffold(
@@ -135,14 +151,16 @@ fun HomeScreen(
                 }
             }
 
-            // Welcome message
             item {
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = fadeIn() + slideInVertically()
-                ) {
-                    WelcomeCard(userName = userPreferences.userName.ifEmpty { "User" })
-                }
+                ProgressHeroCard(
+                    userName = userPreferences.userName,
+                    steps = steps,
+                    stepsGoal = stepsGoal,
+                    calories = calories,
+                    caloriesGoal = caloriesGoal,
+                    progress = progress,
+                    onQuickLogClick = onNavigateToActivityLog
+                )
             }
 
             // Today's stats
@@ -165,7 +183,7 @@ fun HomeScreen(
                         value = todayStats["Steps"] ?: 0,
                         goal = userPreferences.dailyStepGoal,
                         icon = Icons.Default.DirectionsWalk,
-                        color = Color(0xFF22C55E), // FitnessGreen
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .weight(1f)
                             .height(200.dp)
@@ -176,51 +194,11 @@ fun HomeScreen(
                         value = todayStats["Calories"] ?: 0,
                         goal = userPreferences.dailyCalorieGoal,
                         icon = Icons.Default.LocalFireDepartment,
-                        color = Color(0xFFF97316), // FitnessOrange
+                        color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier
                             .weight(1f)
                             .height(200.dp)
                     )
-                }
-            }
-
-            // Quick actions
-            item {
-                Text(
-                    "Quick Actions",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            item {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item {
-                        QuickActionCard(
-                            title = "Activity Log",
-                            icon = Icons.Default.List,
-                            color = FitnessBlue,
-                            onClick = onNavigateToActivityLog
-                        )
-                    }
-                    item {
-                        QuickActionCard(
-                            title = "Exercises",
-                            icon = Icons.Default.FitnessCenter,
-                            color = FitnessPurple,
-                            onClick = onNavigateToExercises
-                        )
-                    }
-                    item {
-                        QuickActionCard(
-                            title = "Profile",
-                            icon = Icons.Default.Person,
-                            color = FitnessGreen,
-                            onClick = onNavigateToProfile
-                        )
-                    }
                 }
             }
 
@@ -277,7 +255,10 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(uiState.workoutSuggestions, key = { it.id }) { suggestion ->
-                                WorkoutSuggestionCard(suggestion)
+                                WorkoutSuggestionCard(
+                                    suggestion = suggestion,
+                                    onClick = { selectedSuggestion = suggestion }
+                                )
                             }
                         }
                     }
@@ -370,34 +351,105 @@ fun HomeScreen(
 
             item { Spacer(modifier = Modifier.height(80.dp)) }
         }
+
+        selectedSuggestion?.let { suggestion ->
+            WorkoutSuggestionDetailDialog(
+                suggestion = suggestion,
+                onDismiss = { selectedSuggestion = null }
+            )
+        }
     }
 }
 
 @Composable
-fun WelcomeCard(userName: String) {
+private fun ProgressHeroCard(
+    userName: String,
+    steps: Int,
+    stepsGoal: Int,
+    calories: Int,
+    caloriesGoal: Int,
+    progress: Float,
+    onQuickLogClick: () -> Unit
+) {
+    val displayName = userName.ifBlank { "there" }
+    val safeProgress = progress.coerceIn(0f, 1f)
+    val progressPercent = (safeProgress * 100).roundToInt()
+    val stepsLabel = if (stepsGoal > 0) "$steps/$stepsGoal" else "$steps steps"
+    val caloriesLabel = if (caloriesGoal > 0) "$calories/$caloriesGoal kcal" else "$calories kcal"
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .semantics { contentDescription = "Welcome card" },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+            .semantics { contentDescription = "Daily progress summary" },
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f)
+                        )
+                    )
+                )
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text(
-                "Welcome back, $userName!",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Let's achieve your fitness goals today!",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Let's move, $displayName",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        "${progressPercent}% of today's goal is complete.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    )
+                }
+                Spacer(modifier = Modifier.width(20.dp))
+                DonutProgress(
+                    progress = safeProgress,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                DetailStat(
+                    title = "Steps",
+                    value = stepsLabel,
+                    modifier = Modifier.weight(1f)
+                )
+                DetailStat(
+                    title = "Calories",
+                    value = caloriesLabel,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            FilledTonalButton(
+                onClick = onQuickLogClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .semantics { contentDescription = "Log an activity" }
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Log activity")
+            }
         }
     }
 }
@@ -415,7 +467,7 @@ fun StatCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2A38)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -441,7 +493,7 @@ fun StatCard(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -456,7 +508,7 @@ fun StatCard(
             Text(
                 text = "Goal: $goal",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.LightGray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -491,50 +543,8 @@ fun DonutProgress(progress: Float, color: Color) {
             text = "${(progress * 100).toInt()}%",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onSurface
         )
-    }
-}
-
-@Composable
-fun QuickActionCard(
-    title: String,
-    icon: ImageVector,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .width(140.dp)
-            .semantics { contentDescription = "$title quick action" }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = color.copy(alpha = 0.2f)
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .size(32.dp)
-                )
-            }
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
     }
 }
 
@@ -547,14 +557,15 @@ fun RecentActivityItem(activity: com.example.smartfit.data.local.ActivityEntity)
         else -> Icons.Default.SportsScore
     }
     val color = when (activity.type) {
-        "Steps" -> FitnessGreen
-        "Workout" -> FitnessBlue
-        "Calories" -> FitnessOrange
+        "Steps" -> MaterialTheme.colorScheme.primary
+        "Workout" -> MaterialTheme.colorScheme.tertiary
+        "Calories" -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.primary
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(
             modifier = Modifier
@@ -581,7 +592,8 @@ fun RecentActivityItem(activity: com.example.smartfit.data.local.ActivityEntity)
                 Text(
                     activity.type,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     "${activity.value}",
@@ -595,24 +607,21 @@ fun RecentActivityItem(activity: com.example.smartfit.data.local.ActivityEntity)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WorkoutSuggestionCard(suggestion: WorkoutSuggestion) {
+private fun WorkoutSuggestionCard(
+    suggestion: WorkoutSuggestion,
+    onClick: () -> Unit
+) {
     val displayName = suggestion.name.takeIf { it.isNotBlank() }
         ?: suggestion.category.takeIf { it.isNotBlank() }
         ?: "Workout Idea"
     val focus = suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }
-    val metrics = buildWorkoutMetrics(suggestion)
-    val tags = buildList {
-        addAll(suggestion.primaryMuscles)
-        addAll(suggestion.equipment)
-    }
-        .filter { it.isNotBlank() }
-        .distinct()
-        .take(4)
+    val metrics = buildWorkoutMetrics(suggestion).take(3)
 
     Card(
         modifier = Modifier
             .width(230.dp)
-            .semantics { contentDescription = "$displayName workout suggestion" },
+            .semantics { contentDescription = "$displayName workout suggestion" }
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -705,13 +714,14 @@ private fun WorkoutSuggestionCard(suggestion: WorkoutSuggestion) {
                     overflow = TextOverflow.Ellipsis
                 )
 
-                if (suggestion.description.isNotBlank()) {
-                    Text(
-                        suggestion.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
+                suggestion.intensityLabel.takeIf { it.isNotBlank() }?.let { intensity ->
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(intensity) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            labelColor = MaterialTheme.colorScheme.primary
+                        )
                     )
                 }
 
@@ -726,24 +736,245 @@ private fun WorkoutSuggestionCard(suggestion: WorkoutSuggestion) {
                     }
                 }
 
-                if (tags.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                Text(
+                    text = "Tap for full breakdown",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun WorkoutSuggestionDetailDialog(
+    suggestion: WorkoutSuggestion,
+    onDismiss: () -> Unit
+) {
+    val displayName = suggestion.name.takeIf { it.isNotBlank() }
+        ?: suggestion.category.takeIf { it.isNotBlank() }
+        ?: "Workout Idea"
+    val metrics = buildWorkoutMetrics(suggestion)
+    val cardioDetails = remember(suggestion) {
+        buildList {
+            if (suggestion.steps > 0) add("${suggestion.steps} steps")
+            suggestion.distanceKm?.takeIf { it > 0.0 }?.let { km ->
+                add(String.format(Locale.getDefault(), "%.2f km", km))
+            }
+            suggestion.averagePaceMinutesPerKm?.takeIf { it > 0 }?.let { pace ->
+                add(String.format(Locale.getDefault(), "%.1f min/km", pace))
+            }
+            suggestion.averageHeartRate?.takeIf { it > 0 }?.let { bpm ->
+                add("Avg HR $bpm bpm")
+            }
+            suggestion.maxHeartRate?.takeIf { it > 0 }?.let { bpm ->
+                add("Max HR $bpm bpm")
+            }
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 8.dp
+        ) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                ) {
+                    if (!suggestion.imageUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = suggestion.imageUrl,
+                            contentDescription = displayName,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop,
+                            placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
+                            error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)
+                                        )
+                                    )
+                                )
+                        )
+                        Icon(
+                            imageVector = Icons.Outlined.FitnessCenter,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(44.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+                                    startY = 80f,
+                                    endY = 360f
+                                )
+                            )
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        tags.forEach { label ->
+                        AssistChip(
+                            onClick = {},
+                            label = { Text(suggestion.category.ifBlank { "Training" }) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                                labelColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+
+                        suggestion.intensityLabel.takeIf { it.isNotBlank() }?.let { intensity ->
                             AssistChip(
                                 onClick = {},
-                                label = {
-                                    Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
+                                label = { Text(intensity) },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    labelColor = MaterialTheme.colorScheme.primary
+                                )
                             )
                         }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .clip(CircleShape)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+                                shape = CircleShape
+                            )
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close details")
+                    }
+                }
+
+                Divider()
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            displayName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        suggestion.description.takeIf { it.isNotBlank() }?.let { body ->
+                            Text(
+                                body,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (metrics.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            metrics.forEach { metric ->
+                                MetricChip(metric.icon, metric.label)
+                            }
+                        }
+                    }
+
+                    if (cardioDetails.isNotEmpty()) {
+                        DetailSection(title = "Performance", values = cardioDetails)
+                    }
+
+                    if (suggestion.primaryMuscles.isNotEmpty()) {
+                        DetailSection(title = "Focus areas", values = suggestion.primaryMuscles)
+                    }
+
+                    if (suggestion.equipment.isNotEmpty()) {
+                        DetailSection(title = "Equipment", values = suggestion.equipment)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        DetailStat(
+                            title = "Duration",
+                            value = suggestion.durationMinutes.takeIf { it > 0 }?.let { "$it min" } ?: "—",
+                            modifier = Modifier.weight(1f)
+                        )
+                        DetailStat(
+                            title = "Calories",
+                            value = suggestion.calories.takeIf { it > 0 }?.let { "$it kcal" } ?: "—",
+                            modifier = Modifier.weight(1f)
+                        )
+                        DetailStat(
+                            title = "Effort",
+                            value = suggestion.effortScore.takeIf { it > 0 }?.let { "$it" } ?: "—",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                        Text("Close")
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DetailSection(title: String, values: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        values.filter { it.isNotBlank() }.forEach { value ->
+            Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun DetailStat(title: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 

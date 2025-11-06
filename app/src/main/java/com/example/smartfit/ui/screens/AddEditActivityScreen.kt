@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -67,6 +68,27 @@ fun AddEditActivityScreen(
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val canSave = value.toIntOrNull()?.let { it > 0 } == true
+
+    val onSave: () -> Unit = {
+        val valueInt = value.toIntOrNull() ?: 0
+        if (valueInt > 0) {
+            val activity = ActivityEntity(
+                id = if (isEditMode) activityId else 0,
+                type = activityType,
+                value = valueInt,
+                date = selectedDate,
+                notes = notes
+            )
+
+            if (isEditMode) {
+                viewModel.updateActivity(activity)
+            } else {
+                viewModel.addActivity(activity)
+            }
+            onNavigateBack()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -78,29 +100,11 @@ fun AddEditActivityScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            val valueInt = value.toIntOrNull() ?: 0
-                            if (valueInt > 0) {
-                                val activity = ActivityEntity(
-                                    id = if (isEditMode) activityId else 0,
-                                    type = activityType,
-                                    value = valueInt,
-                                    date = selectedDate,
-                                    notes = notes
-                                )
-
-                                if (isEditMode) {
-                                    viewModel.updateActivity(activity)
-                                } else {
-                                    viewModel.addActivity(activity)
-                                }
-                                onNavigateBack()
-                            }
-                        },
-                        enabled = value.toIntOrNull() != null && value.toIntOrNull()!! > 0
+                    TextButton(
+                        onClick = onSave,
+                        enabled = canSave
                     ) {
-                        Icon(Icons.Default.Check, "Save")
+                        Text(if (isEditMode) "Save" else "Add")
                     }
                 }
             )
@@ -114,16 +118,47 @@ fun AddEditActivityScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Card(
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isEditMode) "Refresh your activity details" else "Log a new activity",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Capture the effort while it’s fresh so your dashboard stays up to date.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    )
+                }
+            }
+
             // Activity Type Selection
-            Card {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        "Activity Type",
+                        "What did you track?",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Pick the category that best matches your session.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     ExposedDropdownMenuBox(
@@ -168,41 +203,55 @@ fun AddEditActivityScreen(
             }
 
             // Value Input
-            Card {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        "Value",
+                        "How much did you do?",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Enter a whole number so SmartFit can chart your progress.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     OutlinedTextField(
                         value = value,
                         onValueChange = { value = it },
-                        label = { Text("Enter $unit") },
+                        label = { Text("Enter amount") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier
                             .fillMaxWidth()
                             .semantics { contentDescription = "Value input field" },
-                        suffix = { Text(unit) },
+                        suffix = { Text(unit.uppercase(Locale.getDefault())) },
                         isError = value.isNotEmpty() && value.toIntOrNull() == null
                     )
                 }
             }
 
             // Date and Time
-            Card {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "Date & Time",
+                        "When did it happen?",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Keep the original date and time so trends remain accurate.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Row(
@@ -231,15 +280,22 @@ fun AddEditActivityScreen(
             }
 
             // Notes
-            Card {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        "Notes (Optional)",
+                        "Session notes",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Add context like intensity, route, or how you felt.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     OutlinedTextField(
@@ -257,35 +313,17 @@ fun AddEditActivityScreen(
 
             // Save Button
             Button(
-                onClick = {
-                    val valueInt = value.toIntOrNull() ?: 0
-                    if (valueInt > 0) {
-                        val activity = ActivityEntity(
-                            id = if (isEditMode) activityId else 0,
-                            type = activityType,
-                            value = valueInt,
-                            date = selectedDate,
-                            notes = notes
-                        )
-
-                        if (isEditMode) {
-                            viewModel.updateActivity(activity)
-                        } else {
-                            viewModel.addActivity(activity)
-                        }
-                        onNavigateBack()
-                    }
-                },
+                onClick = onSave,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
                     .semantics { contentDescription = "Save activity button" },
-                enabled = value.toIntOrNull() != null && value.toIntOrNull()!! > 0
+                enabled = canSave
             ) {
                 Icon(Icons.Default.Check, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    if (isEditMode) "Update Activity" else "Add Activity",
+                    if (isEditMode) "Save changes" else "Save activity",
                     style = MaterialTheme.typography.titleMedium
                 )
             }

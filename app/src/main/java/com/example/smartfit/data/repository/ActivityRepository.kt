@@ -140,7 +140,7 @@ private fun mapWorkoutToSuggestion(workout: FitWorkout): WorkoutSuggestion {
         category = formatLabel(workout.activity).orEmpty().ifBlank { workout.intensityLabel },
         primaryMuscles = muscles,
         equipment = equipment,
-        imageUrl = null,
+        imageUrl = workoutImageUrl(workout.activity),
         description = description,
         durationMinutes = workout.durationMinutes,
         calories = workout.calories,
@@ -185,4 +185,18 @@ private fun buildWorkoutDescription(workout: FitWorkout): String {
     }
 
     return builder.toString()
+}
+
+private fun workoutImageUrl(activityName: String): String? {
+    val normalized = activityName.lowercase(Locale.getDefault())
+    return when {
+        normalized.contains("run") -> "https://images.unsplash.com/photo-1546484959-f9a94a30713e?auto=format&fit=crop&w=1200&q=80"
+        normalized.contains("walk") -> "https://images.unsplash.com/photo-1526403228-eda4a702e8c8?auto=format&fit=crop&w=1200&q=80"
+        normalized.contains("cycle") || normalized.contains("bike") -> "https://images.unsplash.com/photo-1507831228885-004b65a06f4c?auto=format&fit=crop&w=1200&q=80"
+        normalized.contains("swim") -> "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1200&q=80"
+        normalized.contains("yoga") -> "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80"
+        normalized.contains("strength") || normalized.contains("gym") -> "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80"
+        normalized.contains("hiit") || normalized.contains("interval") -> "https://images.unsplash.com/photo-1546484955-0bce7fefc357?auto=format&fit=crop&w=1200&q=80"
+        else -> "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=1200&q=80"
+    }
 }

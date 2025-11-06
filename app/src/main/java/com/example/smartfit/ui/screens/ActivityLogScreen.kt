@@ -1,32 +1,40 @@
 package com.example.smartfit.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+
 import com.example.smartfit.data.local.ActivityEntity
 import com.example.smartfit.ui.theme.*
 import com.example.smartfit.viewmodel.ActivityViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ActivityLogScreen(
     viewModel: ActivityViewModel,
-    onNavigateBack: () -> Unit,
+    onNavigateBack: (() -> Unit)? = null,
     onNavigateToEdit: (Long) -> Unit,
     onNavigateToAdd: () -> Unit
 ) {
@@ -41,19 +49,11 @@ fun ActivityLogScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Activity Log") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToAdd) {
-                        Icon(Icons.Default.Add, "Add activity")
-                    }
-                }
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onNavigateToAdd,
+                icon = { Icon(Icons.Default.Add, contentDescription = "Add activity") },
+                text = { Text("Add Activity") }
             )
         }
     ) { padding ->
@@ -61,9 +61,35 @@ fun ActivityLogScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Activity Log",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Review your tracked sessions and keep momentum going.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (onNavigateBack != null) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                }
+            }
+
             // Weekly Summary
             item {
                 WeeklySummaryCard(weeklyStats)
@@ -71,32 +97,36 @@ fun ActivityLogScreen(
 
             // Filter chips
             item {
-                Row(
+                val filters = listOf("All", "Steps", "Workout", "Calories")
+                FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FilterChip(
-                        selected = selectedFilter == "All",
-                        onClick = { selectedFilter = "All" },
-                        label = { Text("All") }
-                    )
-                    FilterChip(
-                        selected = selectedFilter == "Steps",
-                        onClick = { selectedFilter = "Steps" },
-                        label = { Text("Steps") }
-                    )
-                    FilterChip(
-                        selected = selectedFilter == "Workout",
-                        onClick = { selectedFilter = "Workout" },
-                        label = { Text("Workout") }
-                    )
-                    FilterChip(
-                        selected = selectedFilter == "Calories",
-                        onClick = { selectedFilter = "Calories" },
-                        label = { Text("Calories") }
-                    )
+                    filters.forEach { filter ->
+                        FilterChip(
+                            selected = selectedFilter == filter,
+                            onClick = { selectedFilter = filter },
+                            label = { Text(filter) },
+                            leadingIcon = if (selectedFilter == filter) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                selectedLabelColor = MaterialTheme.colorScheme.primary,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
                 }
             }
 
@@ -125,7 +155,7 @@ fun ActivityLogScreen(
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
 
@@ -160,54 +190,85 @@ fun WeeklySummaryCard(stats: Map<String, Int>) {
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = "Weekly summary card" },
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Box(
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+                        )
+                    )
+                )
+                .padding(20.dp)
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.CalendarMonth,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Text(
-                    "This Week's Summary",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(42.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.25f)
+                    ) {
+                        Icon(
+                            Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            modifier = Modifier.padding(10.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Column {
+                        Text(
+                            "This Week",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            "A quick look at your momentum",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                WeeklyStat(
-                    icon = Icons.Default.DirectionsWalk,
-                    value = stats["Steps"] ?: 0,
-                    unit = "steps",
-                    color = FitnessGreen
-                )
-                WeeklyStat(
-                    icon = Icons.Default.LocalFireDepartment,
-                    value = stats["Calories"] ?: 0,
-                    unit = "kcal",
-                    color = FitnessOrange
-                )
-                WeeklyStat(
-                    icon = Icons.Default.FitnessCenter,
-                    value = stats["Workout"] ?: 0,
-                    unit = "min",
-                    color = FitnessBlue
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        WeeklyStat(
+                            icon = Icons.Default.DirectionsWalk,
+                            value = stats["Steps"] ?: 0,
+                            unit = "steps",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        WeeklyStat(
+                            icon = Icons.Default.LocalFireDepartment,
+                            value = stats["Calories"] ?: 0,
+                            unit = "kcal",
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        WeeklyStat(
+                            icon = Icons.Default.FitnessCenter,
+                            value = stats["Workout"] ?: 0,
+                            unit = "min",
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
             }
         }
     }
@@ -221,6 +282,10 @@ fun WeeklyStat(
     color: Color
 ) {
     Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
+            .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
@@ -258,9 +323,9 @@ fun ActivityItemCard(
         else -> Icons.Default.SportsScore
     }
     val color = when (activity.type) {
-        "Steps" -> FitnessGreen
-        "Workout" -> FitnessBlue
-        "Calories" -> FitnessOrange
+        "Steps" -> MaterialTheme.colorScheme.primary
+        "Workout" -> MaterialTheme.colorScheme.tertiary
+        "Calories" -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.primary
     }
     val unit = when (activity.type) {
@@ -276,7 +341,10 @@ fun ActivityItemCard(
             .semantics {
                 contentDescription = "${activity.type} activity: ${activity.value} $unit"
             },
-        onClick = onEdit
+        onClick = onEdit,
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
             modifier = Modifier
@@ -291,8 +359,8 @@ fun ActivityItemCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = color.copy(alpha = 0.2f)
+                    shape = CircleShape,
+                    color = color.copy(alpha = 0.18f)
                 ) {
                     Icon(
                         icon,
@@ -347,12 +415,15 @@ fun EmptyStateCard(onAddClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(32.dp)
+            .padding(horizontal = 8.dp, vertical = 32.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(32.dp),
+                .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -360,17 +431,18 @@ fun EmptyStateCard(onAddClick: () -> Unit) {
                 Icons.Default.EventNote,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
                 "No activities yet",
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
                 "Start tracking your fitness journey!",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
             )
             Button(onClick = onAddClick) {
                 Icon(Icons.Default.Add, contentDescription = null)

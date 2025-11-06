@@ -1,11 +1,11 @@
 package com.example.smartfit.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,56 +15,82 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelfImprovement
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.painter.ColorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.example.smartfit.data.model.WorkoutSuggestion
 import com.example.smartfit.viewmodel.ActivityViewModel
 import java.util.Locale
+import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ExercisesScreen(
     viewModel: ActivityViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: (() -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var selectedSuggestion by remember { mutableStateOf<WorkoutSuggestion?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf("All") }
+    var showAll by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (!uiState.suggestionsLoading && uiState.workoutSuggestions.isEmpty() && uiState.suggestionsError == null) {
@@ -72,18 +98,7 @@ fun ExercisesScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Exercises") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { padding ->
+    Scaffold { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -97,9 +112,10 @@ fun ExercisesScreen(
                     ) {
                         CircularProgressIndicator()
                         Spacer(Modifier.height(12.dp))
-                        Text("Loading fresh ideas…")
+                        Text("Loading personalized ideas…")
                     }
                 }
+
                 uiState.suggestionsError != null -> {
                     Column(
                         modifier = Modifier
@@ -107,13 +123,20 @@ fun ExercisesScreen(
                             .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("We couldn't load the exercises", color = MaterialTheme.colorScheme.error)
+                        Text(
+                            "We couldn't load the exercises",
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(uiState.suggestionsError ?: "Unknown error")
                         Spacer(Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) { Text("Try again") }
+                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) {
+                            Text("Try again")
+                        }
                     }
                 }
+
                 uiState.workoutSuggestions.isEmpty() -> {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
@@ -121,42 +144,154 @@ fun ExercisesScreen(
                     ) {
                         Text("No exercises yet")
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) { Text("Load exercises") }
+                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) {
+                            Text("Load exercises")
+                        }
                     }
                 }
+
                 else -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 220.dp),
+                    val categories = remember(uiState.workoutSuggestions) {
+                        buildList {
+                            add("All")
+                            uiState.workoutSuggestions
+                                .mapNotNull { suggestion ->
+                                    suggestion.category.takeIf { it.isNotBlank() }
+                                }
+                                .distinct()
+                                .sortedBy { it.lowercase(Locale.getDefault()) }
+                                .forEach { add(it) }
+                        }
+                    }
+
+                    if (selectedCategory !in categories) {
+                        selectedCategory = "All"
+                    }
+
+                    val filteredSuggestions = remember(uiState.workoutSuggestions, selectedCategory, searchQuery) {
+                        val query = searchQuery.trim()
+                        uiState.workoutSuggestions.filter { suggestion ->
+                            val matchesCategory = selectedCategory == "All" ||
+                                suggestion.category.equals(selectedCategory, ignoreCase = true)
+                            val searchableFields = listOf(
+                                suggestion.name,
+                                suggestion.category,
+                                suggestion.intensityLabel
+                            ) + suggestion.primaryMuscles + suggestion.equipment
+                            val matchesQuery = query.isBlank() || searchableFields.any { field ->
+                                field.contains(query, ignoreCase = true)
+                            }
+                            matchesCategory && matchesQuery
+                        }
+                    }
+
+                    val summaryMetrics = remember(uiState.workoutSuggestions) {
+                        buildExerciseSummary(uiState.workoutSuggestions)
+                    }
+                    val featuredSuggestions = remember(filteredSuggestions) { filteredSuggestions.take(4) }
+                    val remainingSuggestions = remember(filteredSuggestions) { filteredSuggestions.drop(4) }
+                    val canExpand = remember(remainingSuggestions) { remainingSuggestions.size > 6 }
+                    val displayedSuggestions = remember(remainingSuggestions, showAll, canExpand) {
+                        when {
+                            !canExpand -> remainingSuggestions
+                            showAll -> remainingSuggestions
+                            else -> remainingSuggestions.take(6)
+                        }
+                    }
+
+                    if (!canExpand && showAll) {
+                        showAll = false
+                    }
+
+                    LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Column(Modifier.fillMaxWidth()) {
-                                Text(
-                                    "Workout Library",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "${uiState.workoutSuggestions.size} curated moves to inspire your next session.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        item {
+                            HeaderRow(
+                                hasBackAction = onNavigateBack != null,
+                                onBack = onNavigateBack
+                            )
+                        }
+
+                        item {
+                            SearchField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                onClear = {
+                                    searchQuery = ""
+                                    showAll = false
+                                }
+                            )
+                        }
+
+                        if (categories.size > 1) {
+                            item {
+                                CategorySelector(
+                                    categories = categories,
+                                    selected = selectedCategory,
+                                    onSelectedChange = {
+                                        selectedCategory = it
+                                        showAll = false
+                                    }
                                 )
                             }
                         }
-                        items(uiState.workoutSuggestions, key = { it.id }) { suggestion ->
-                            ExerciseCard(suggestion)
+
+                        if (summaryMetrics.isNotEmpty()) {
+                            item { SummaryRow(metrics = summaryMetrics) }
                         }
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(
+
+                        if (featuredSuggestions.isNotEmpty()) {
+                            item {
+                                FeaturedCarousel(
+                                    suggestions = featuredSuggestions,
+                                    onSelect = { selectedSuggestion = it }
+                                )
+                            }
+                        }
+
+                        if (displayedSuggestions.isEmpty()) {
+                            item {
+                                ExercisesEmptyState(
+                                    selectedCategory = selectedCategory,
+                                    searchQuery = searchQuery,
+                                    onClearFilters = {
+                                        selectedCategory = "All"
+                                        searchQuery = ""
+                                        showAll = false
+                                    },
+                                    onRefresh = { viewModel.loadWorkoutSuggestions(limit = 20) }
+                                )
+                            }
+                        } else {
+                            item {
+                                EssentialsGrid(
+                                    suggestions = displayedSuggestions,
+                                    onSelect = { selectedSuggestion = it }
+                                )
+                            }
+
+                            if (canExpand) {
+                                item {
+                                    ToggleCatalogueButton(
+                                        showingAll = showAll,
+                                        onToggle = { showAll = !showAll }
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
+                                horizontalArrangement = Arrangement.Center
                             ) {
                                 TextButton(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) {
-                                    Text("Refresh list")
+                                    Icon(Icons.Default.Refresh, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Refresh catalogue")
                                 }
                             }
                         }
@@ -164,265 +299,425 @@ fun ExercisesScreen(
                 }
             }
         }
+
+        selectedSuggestion?.let { suggestion ->
+            WorkoutSuggestionDetailDialog(
+                suggestion = suggestion,
+                onDismiss = { selectedSuggestion = null }
+            )
+        }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ExerciseCard(suggestion: WorkoutSuggestion) {
-    val displayName = suggestion.name.takeIf { it.isNotBlank() }
-        ?: suggestion.category.takeIf { it.isNotBlank() }
-        ?: "Exercise #${suggestion.id}"
+private fun HeaderRow(hasBackAction: Boolean, onBack: (() -> Unit)?) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Training studio",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Plan a workout without endless scrolling.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (hasBackAction && onBack != null) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+        }
+    }
+}
 
-    val secondaryLabel = suggestion.category.takeIf { it.isNotBlank() }
-        ?: suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }
-    val equipmentLabel = suggestion.equipment.firstOrNull()?.takeUnless { it.equals("Bodyweight", ignoreCase = true) }
-    val metrics = buildExerciseMetrics(suggestion)
+@Composable
+private fun SearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        placeholder = { Text("Search by name, focus, or gear") },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = if (value.isNotBlank()) {
+            {
+                IconButton(onClick = onClear) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear search")
+                }
+            }
+        } else null,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { /* filtering handled by state */ })
+    )
+}
 
+@Composable
+private fun CategorySelector(
+    categories: List<String>,
+    selected: String,
+    onSelectedChange: (String) -> Unit
+) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        categories.forEachIndexed { index, label ->
+            val isSelected = label == selected
+            SegmentedButton(
+                selected = isSelected,
+                onClick = { onSelectedChange(label) },
+                shape = SegmentedButtonDefaults.itemShape(index, categories.size)
+            ) {
+                Text(label)
+            }
+        }
+    }
+}
+
+private data class SummaryMetric(val title: String, val value: String, val icon: ImageVector)
+
+private fun buildExerciseSummary(suggestions: List<WorkoutSuggestion>): List<SummaryMetric> {
+    if (suggestions.isEmpty()) return emptyList()
+
+    val total = suggestions.size
+    val durations = suggestions.mapNotNull { it.durationMinutes.takeIf { minutes -> minutes > 0 } }
+    val avgDuration = durations.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
+    val focusCount = suggestions.flatMap { it.primaryMuscles }
+        .mapNotNull { it.takeIf(String::isNotBlank) }
+        .distinct()
+        .size
+    val topIntensity = suggestions.mapNotNull { it.intensityLabel.takeIf(String::isNotBlank) }
+        .groupingBy { it }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+
+    return buildList {
+        add(SummaryMetric("Workouts", total.toString(), Icons.Default.FitnessCenter))
+        avgDuration?.let { add(SummaryMetric("Avg duration", " min", Icons.Default.Speed)) }
+        if (focusCount > 0) {
+            add(SummaryMetric("Focus groups", focusCount.toString(), Icons.Default.AutoAwesome))
+        }
+        topIntensity?.let {
+            add(SummaryMetric("Common focus", it, Icons.Default.Insights))
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(metrics: List<SummaryMetric>) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(metrics) { metric ->
+            SummaryPill(metric)
+        }
+    }
+}
+
+@Composable
+private fun SummaryPill(metric: SummaryMetric) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            ) {
+                Box(
+                    modifier = Modifier.size(36.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(metric.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Column {
+                Text(metric.value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(metric.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedCarousel(
+    suggestions: List<WorkoutSuggestion>,
+    onSelect: (WorkoutSuggestion) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Featured picks",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(suggestions) { suggestion ->
+                FeaturedExerciseCard(suggestion = suggestion, onClick = { onSelect(suggestion) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedExerciseCard(
+    suggestion: WorkoutSuggestion,
+    onClick: () -> Unit
+) {
+    val visual = categoryVisual(suggestion.category)
+    Card(
+        modifier = Modifier
+            .width(220.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(Brush.linearGradient(visual.gradient), shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(visual.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+            }
+            Text(
+                suggestion.name.takeIf { it.isNotBlank() }
+                    ?: suggestion.category.ifBlank { "Workout" },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            suggestion.intensityLabel.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+            val highlights = buildExerciseHighlights(suggestion)
+            highlights.take(2).forEach { line ->
+                Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                "Open details",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun EssentialsGrid(
+    suggestions: List<WorkoutSuggestion>,
+    onSelect: (WorkoutSuggestion) -> Unit
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 180.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        userScrollEnabled = false,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(suggestions, key = { it.id }) { suggestion ->
+            ExerciseTile(suggestion = suggestion, onClick = { onSelect(suggestion) })
+        }
+    }
+}
+
+@Composable
+private fun ExerciseTile(
+    suggestion: WorkoutSuggestion,
+    onClick: () -> Unit
+) {
+    val visual = categoryVisual(suggestion.category)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(Brush.linearGradient(visual.gradient), shape = CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(visual.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        suggestion.name.takeIf { it.isNotBlank() }
+                            ?: suggestion.category.ifBlank { "Workout" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    suggestion.intensityLabel.takeIf { it.isNotBlank() }
+                        ?: suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }
+                        ?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                }
+            }
+
+            val highlights = buildExerciseHighlights(suggestion)
+            highlights.take(3).forEach { highlight ->
+                Text(
+                    "• ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "View details",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToggleCatalogueButton(
+    showingAll: Boolean,
+    onToggle: () -> Unit
+) {
+    TextButton(
+        onClick = onToggle,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(if (showingAll) "Show fewer" else "Show more workouts")
+    }
+}
+
+private data class CategoryVisual(val icon: ImageVector, val gradient: List<Color>)
+
+@Composable
+private fun categoryVisual(category: String): CategoryVisual {
+    val scheme = MaterialTheme.colorScheme
+    val lower = category.lowercase(Locale.getDefault())
+    return when {
+        "strength" in lower -> CategoryVisual(
+            icon = Icons.Default.FitnessCenter,
+            gradient = listOf(scheme.primary, scheme.primary.copy(alpha = 0.6f))
+        )
+
+        "cardio" in lower || "run" in lower -> CategoryVisual(
+            icon = Icons.Default.DirectionsRun,
+            gradient = listOf(scheme.secondary, scheme.secondary.copy(alpha = 0.6f))
+        )
+
+        "mobility" in lower || "yoga" in lower -> CategoryVisual(
+            icon = Icons.Default.SelfImprovement,
+            gradient = listOf(scheme.tertiary, scheme.tertiary.copy(alpha = 0.6f))
+        )
+
+        else -> CategoryVisual(
+            icon = Icons.Default.AutoAwesome,
+            gradient = listOf(scheme.primary, scheme.secondary)
+        )
+    }
+}
+
+private fun buildExerciseHighlights(suggestion: WorkoutSuggestion): List<String> {
+    val highlights = mutableListOf<String>()
+    if (suggestion.durationMinutes > 0) {
+        highlights += " min"
+    }
+    if (suggestion.calories > 0) {
+        highlights += " kcal"
+    }
+    suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }?.let { highlights += it }
+    suggestion.equipment.firstOrNull()?.takeIf { it.isNotBlank() }?.let { highlights += it }
+    suggestion.averageHeartRate?.takeIf { it > 0 }?.let { highlights += "Avg HR  bpm" }
+    suggestion.steps.takeIf { it > 0 }?.let { highlights += " steps" }
+    return highlights
+}
+
+@Composable
+private fun ExercisesEmptyState(
+    selectedCategory: String,
+    searchQuery: String,
+    onClearFilters: () -> Unit,
+    onRefresh: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column {
-            ExerciseMediaHeader(
-                title = displayName,
-                category = suggestion.category,
-                imageUrl = suggestion.imageUrl,
-                primaryMuscle = suggestion.primaryMuscles.firstOrNull()
-            )
-
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(
-                    displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                secondaryLabel?.let {
-                    Spacer(Modifier.height(6.dp))
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(it) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            labelColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
-
-                equipmentLabel?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.FitnessCenter,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (suggestion.description.isNotBlank()) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        suggestion.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                if (metrics.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        metrics.forEach { metric ->
-                            MetricChip(metric.icon, metric.label)
-                        }
-                    }
-                }
-
-                val muscleTags = suggestion.primaryMuscles
-                    .filter { it.isNotBlank() }
-                    .distinct()
-                val equipmentTags = suggestion.equipment
-                    .filter { it.isNotBlank() }
-                    .distinct()
-
-                if (muscleTags.isNotEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        "Primary focus",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        muscleTags.take(6).forEach { label ->
-                            TagChip(label)
-                        }
-                    }
-                }
-
-                if (equipmentTags.isNotEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        "Equipment",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        equipmentTags.take(6).forEach { label ->
-                            TagChip(label)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExerciseMediaHeader(
-    title: String,
-    category: String,
-    imageUrl: String?,
-    primaryMuscle: String?
-) {
-    val overlayGradient = Brush.verticalGradient(
-        colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
-        startY = 0f,
-        endY = 340f
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp)
-            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-    ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = title,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop,
-                placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant),
-                error = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
-            )
-            Box(modifier = Modifier.matchParentSize().background(overlayGradient))
-        } else {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        brush = Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f)
-                            )
-                        )
-                    )
-            )
-        }
-
         Column(
             modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp)
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AssistChip(
-                onClick = {},
-                label = { Text(category.ifBlank { "Training" }) },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                    labelColor = MaterialTheme.colorScheme.onSurface
-                )
+            Icon(
+                Icons.Default.FilterAlt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
             )
-            primaryMuscle?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            val message = when {
+                searchQuery.isNotBlank() -> "No workouts match \"\""
+                selectedCategory != "All" -> "No workouts tagged "
+                else -> "No workouts available"
+            }
+            Text(message, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+            Text(
+                text = "Try clearing filters or refreshing the catalogue for more ideas.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledTonalButton(onClick = onRefresh) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Refresh")
+                }
+                TextButton(onClick = onClearFilters) {
+                    Text("Clear filters")
+                }
             }
         }
     }
-}
-
-@Composable
-private fun TagChip(label: String) {
-    AssistChip(
-        onClick = {},
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-    )
-}
-
-private data class ExerciseMetric(val icon: ImageVector, val label: String)
-
-private fun buildExerciseMetrics(suggestion: WorkoutSuggestion): List<ExerciseMetric> {
-    val chips = mutableListOf<ExerciseMetric>()
-    if (suggestion.durationMinutes > 0) {
-        chips += ExerciseMetric(Icons.Default.Schedule, "${suggestion.durationMinutes} min")
-    }
-    if (suggestion.calories > 0) {
-        chips += ExerciseMetric(Icons.Default.LocalFireDepartment, "${suggestion.calories} kcal")
-    }
-    suggestion.distanceKm?.takeIf { it > 0.0 }?.let { distance ->
-        chips += ExerciseMetric(Icons.Default.Map, String.format(Locale.getDefault(), "%.1f km", distance))
-    }
-    if (suggestion.steps > 0) {
-        chips += ExerciseMetric(Icons.Default.DirectionsWalk, "${suggestion.steps} steps")
-    }
-    suggestion.averagePaceMinutesPerKm?.takeIf { it > 0.0 }?.let { pace ->
-        chips += ExerciseMetric(Icons.Default.Speed, String.format(Locale.getDefault(), "%.1f min/km", pace))
-    }
-    suggestion.averageHeartRate?.takeIf { it > 0 }?.let { bpm ->
-        chips += ExerciseMetric(Icons.Default.Favorite, "$bpm bpm")
-    }
-    if (suggestion.intensityLabel.isNotBlank()) {
-        chips += ExerciseMetric(Icons.Default.Bolt, suggestion.intensityLabel)
-    }
-    if (suggestion.effortScore > 0) {
-        chips += ExerciseMetric(Icons.Default.ThumbUp, "Score ${suggestion.effortScore}")
-    }
-    return chips.take(8)
-}
-
-@Composable
-private fun MetricChip(icon: ImageVector, label: String) {
-    AssistChip(
-        onClick = {},
-        leadingIcon = {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        },
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-            labelColor = MaterialTheme.colorScheme.primary
-        )
-    )
 }
