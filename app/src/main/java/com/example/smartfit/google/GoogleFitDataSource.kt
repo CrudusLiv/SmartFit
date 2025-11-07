@@ -380,6 +380,69 @@ class GoogleFitDataSource(private val context: Context) {
                 category = "Cardio",
                 muscles = listOf("Legs", "Core"),
                 equipment = listOf("Bodyweight")
+            ),
+            FallbackExercise(
+                name = "Mountain Climbers",
+                description = "Dynamic core and cardio combo performed on the floor.",
+                category = "HIIT",
+                muscles = listOf("Core", "Shoulders"),
+                equipment = listOf("Bodyweight")
+            ),
+            FallbackExercise(
+                name = "Russian Twist",
+                description = "Seated rotational movement that lights up the obliques.",
+                category = "Core",
+                muscles = listOf("Obliques", "Core"),
+                equipment = listOf("Medicine Ball")
+            ),
+            FallbackExercise(
+                name = "Seated Row",
+                description = "Pulling motion to strengthen the back and biceps.",
+                category = "Strength",
+                muscles = listOf("Back", "Biceps"),
+                equipment = listOf("Cable Machine")
+            ),
+            FallbackExercise(
+                name = "Glute Bridge",
+                description = "Posterior-chain activation that also supports hip mobility.",
+                category = "Mobility",
+                muscles = listOf("Glutes", "Hamstrings"),
+                equipment = listOf("Bodyweight")
+            ),
+            FallbackExercise(
+                name = "Rowing Intervals",
+                description = "Alternating sprint and recovery intervals on the erg.",
+                category = "Cardio",
+                muscles = listOf("Back", "Legs"),
+                equipment = listOf("Row Erg")
+            ),
+            FallbackExercise(
+                name = "Yoga Flow",
+                description = "Guided vinyasa sequence to improve balance and flexibility.",
+                category = "Yoga",
+                muscles = listOf("Core", "Shoulders"),
+                equipment = listOf("Mat")
+            ),
+            FallbackExercise(
+                name = "Jump Rope",
+                description = "Quick cardio finisher emphasizing rhythm and footwork.",
+                category = "Cardio",
+                muscles = listOf("Calves", "Core"),
+                equipment = listOf("Jump Rope")
+            ),
+            FallbackExercise(
+                name = "Spin Ride",
+                description = "Indoor cycling profile with hill and sprint rotations.",
+                category = "Cycling",
+                muscles = listOf("Quadriceps", "Glutes"),
+                equipment = listOf("Spin Bike")
+            ),
+            FallbackExercise(
+                name = "Lap Swim",
+                description = "Endurance swim set with pull and kick focus.",
+                category = "Swimming",
+                muscles = listOf("Shoulders", "Back"),
+                equipment = listOf("Pool")
             )
         )
     }

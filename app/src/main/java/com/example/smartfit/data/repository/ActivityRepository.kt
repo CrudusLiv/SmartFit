@@ -1,13 +1,18 @@
 package com.example.smartfit.data.repository
 
 import android.util.Log
+import androidx.core.text.HtmlCompat
 import com.example.smartfit.data.local.ActivityDao
 import com.example.smartfit.data.local.ActivityEntity
 import com.example.smartfit.data.model.WorkoutSuggestion
+import com.example.smartfit.data.remote.ExerciseImage
+import com.example.smartfit.data.remote.ExerciseInfo
 import com.example.smartfit.data.remote.ExerciseInfoResponse
+import com.example.smartfit.data.remote.WgerRemoteDataSource
 import com.example.smartfit.google.GoogleFitDataSource
 import com.example.smartfit.google.GoogleFitDataSource.FitWorkout
 import java.util.Locale
+import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -23,7 +28,8 @@ sealed class Result<out T> {
 
 class ActivityRepository(
     private val activityDao: ActivityDao,
-    private val googleFitDataSource: GoogleFitDataSource
+    private val googleFitDataSource: GoogleFitDataSource,
+    private val wgerRemoteDataSource: WgerRemoteDataSource
 ) {
     companion object { private const val TAG = "ActivityRepository" }
 
@@ -58,11 +64,23 @@ class ActivityRepository(
     fun getExercisesFromGoogleFit(limit: Int = 20, offset: Int = 0): Flow<Result<ExerciseInfoResponse>> = flow {
         emit(Result.Loading)
         try {
-            val response = googleFitDataSource.fetchExercises(limit = limit, offset = offset)
-            emit(Result.Success(response))
+            val fitResponse = googleFitDataSource.fetchExercises(limit = limit, offset = offset)
+            val wgerResponse = try {
+                wgerRemoteDataSource.fetchExercises(limit = limit, offset = offset)
+            } catch (catalogueError: Exception) {
+                Log.w(TAG, "Unable to load catalogue exercises", catalogueError)
+                fitResponse
+            }
+            val merged = mergeExerciseResponses(fitResponse, wgerResponse, limit)
+            emit(Result.Success(merged))
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching exercises", e)
-            emit(Result.Error(e))
+            try {
+                val fallback = wgerRemoteDataSource.fetchExercises(limit = limit, offset = offset)
+                emit(Result.Success(fallback))
+            } catch (_: Exception) {
+                emit(Result.Error(e))
+            }
         }
     }.catch { throwable ->
         emit(Result.Error(Exception(throwable)))
@@ -73,17 +91,45 @@ class ActivityRepository(
         try {
             val fetchLimit = (limit * 3).coerceAtLeast(limit)
             val workouts = googleFitDataSource.fetchWorkouts(limit = fetchLimit, offset = offset)
-            val suggestions = workouts
+            val googleSuggestions = workouts
                 .asSequence()
                 .map(::mapWorkoutToSuggestion)
                 .distinctBy { it.id }
-                .take(limit)
                 .toList()
+            val remoteLimit = min(limit * 2, 60)
+            val cataloguePrimary = try {
+                fetchCatalogueSuggestions(remoteLimit, offset)
+            } catch (catalogueError: Exception) {
+                Log.w(TAG, "Unable to load catalogue suggestions", catalogueError)
+                emptyList()
+            }
 
-            emit(Result.Success(suggestions))
+            var merged = blendSuggestions(limit, cataloguePrimary, googleSuggestions)
+
+            if (merged.size < limit) {
+                val additional = try {
+                    fetchCatalogueSuggestions((limit - merged.size) * 2, offset + remoteLimit)
+                } catch (catalogueError: Exception) {
+                    Log.w(TAG, "Additional catalogue fetch failed", catalogueError)
+                    emptyList()
+                }
+                val expandedCatalogue = cataloguePrimary + additional
+                merged = blendSuggestions(limit, expandedCatalogue, googleSuggestions)
+            }
+
+            emit(Result.Success(merged))
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching workout suggestions", e)
-            emit(Result.Error(e))
+            try {
+                val fallback = fetchCatalogueSuggestions(limit * 2, offset)
+                if (fallback.isNotEmpty()) {
+                    emit(Result.Success(fallback.take(limit)))
+                } else {
+                    emit(Result.Error(e))
+                }
+            } catch (catalogueError: Exception) {
+                emit(Result.Error(e))
+            }
         }
     }.catch { throwable ->
         emit(Result.Error(Exception(throwable)))
@@ -115,6 +161,160 @@ class ActivityRepository(
     suspend fun getActivityById(id: Long): ActivityEntity? = withContext(Dispatchers.IO) {
         activityDao.getActivityById(id)
     }
+
+    private suspend fun fetchCatalogueSuggestions(limit: Int, offset: Int): List<WorkoutSuggestion> {
+        val safeLimit = limit.coerceIn(1, 100)
+        val response = wgerRemoteDataSource.fetchExercises(limit = safeLimit, offset = offset)
+        return response.results
+            .asSequence()
+            .mapIndexed { index, info -> mapExerciseToSuggestion(info, offset + index) }
+            .filterNotNull()
+            .distinctBy { it.id }
+            .toList()
+    }
+}
+
+private fun blendSuggestions(
+    limit: Int,
+    vararg sources: List<WorkoutSuggestion>
+): List<WorkoutSuggestion> {
+    if (sources.isEmpty()) return emptyList()
+    val result = mutableListOf<WorkoutSuggestion>()
+    val seen = mutableSetOf<Int>()
+    var index = 0
+    while (result.size < limit) {
+        var added = false
+        for (source in sources) {
+            if (index < source.size) {
+                val candidate = source[index]
+                if (seen.add(candidate.id)) {
+                    result += candidate
+                    added = true
+                    if (result.size == limit) break
+                }
+            }
+        }
+        if (!added) break
+        index++
+    }
+    return result
+}
+
+private fun mergeExerciseResponses(
+    fitResponse: ExerciseInfoResponse,
+    wgerResponse: ExerciseInfoResponse,
+    limit: Int
+): ExerciseInfoResponse {
+    val merged = mutableListOf<ExerciseInfo>()
+    val seen = mutableSetOf<Int>()
+
+    fun addUnique(info: ExerciseInfo) {
+        if (merged.size >= limit) return
+        val key = uniqueExerciseId(info)
+        if (seen.add(key)) {
+            merged += info
+        }
+    }
+
+    wgerResponse.results.forEach(::addUnique)
+    if (merged.size < limit) {
+        fitResponse.results.forEach(::addUnique)
+    }
+
+    val candidateCounts = listOfNotNull(
+        wgerResponse.count?.takeIf { it > 0 },
+        fitResponse.count?.takeIf { it > 0 },
+        merged.size
+    )
+
+    val totalCount = candidateCounts.maxOrNull() ?: merged.size
+
+    return ExerciseInfoResponse(
+        count = totalCount,
+        next = wgerResponse.next ?: fitResponse.next,
+        previous = wgerResponse.previous ?: fitResponse.previous,
+        results = merged
+    )
+}
+
+private fun uniqueExerciseId(info: ExerciseInfo): Int =
+    info.id ?: info.name?.hashCode() ?: info.hashCode()
+
+private fun mapExerciseToSuggestion(info: ExerciseInfo, position: Int): WorkoutSuggestion? {
+    val id = info.id ?: (info.name?.hashCode() ?: position)
+    val name = info.name?.takeIf { it.isNotBlank() } ?: return null
+    val category = info.category?.name?.takeIf { it.isNotBlank() } ?: "General"
+    val muscles = info.muscles.mapNotNull { it.name_en ?: it.name }.filter { it.isNotBlank() }
+    val equipment = info.equipment.mapNotNull { it.name }.filter { it.isNotBlank() }
+    val imageUrl = resolveImageUrl(info.images)
+    val description = sanitizeDescription(info.description)
+    val intensity = guessIntensity(category)
+
+    return WorkoutSuggestion(
+        id = id,
+        name = name.trim(),
+        category = category.trim(),
+        primaryMuscles = muscles.ifEmpty { listOf(category) },
+        equipment = equipment.ifEmpty { listOf("Bodyweight") },
+        imageUrl = imageUrl,
+        description = description,
+        durationMinutes = defaultDuration(category),
+        calories = 0,
+        distanceKm = null,
+        steps = 0,
+        startTimeMillis = null,
+        intensityLabel = intensity,
+        effortScore = defaultEffort(intensity),
+        averageHeartRate = null,
+        maxHeartRate = null,
+        averagePaceMinutesPerKm = null
+    )
+}
+
+private fun resolveImageUrl(images: List<ExerciseImage>): String? {
+    val candidate = images.firstOrNull { it.is_main == true } ?: images.firstOrNull()
+    val raw = candidate?.image?.trim().orEmpty()
+    if (raw.isBlank()) return null
+    return if (raw.startsWith("http")) raw else "https://wger.de$raw"
+}
+
+private fun sanitizeDescription(raw: String?): String {
+    if (raw.isNullOrBlank()) return "No description available."
+    val text = HtmlCompat.fromHtml(raw, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
+    if (text.isNotBlank()) return text
+    return raw.replace(Regex("<[^>]*>"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .ifBlank { "No description available." }
+}
+
+private fun guessIntensity(category: String): String {
+    val lower = category.lowercase(Locale.getDefault())
+    return when {
+        listOf("hiit", "plyometric", "crossfit").any(lower::contains) -> "High intensity"
+        listOf("strength", "power", "legs", "arms").any(lower::contains) -> "Strength focus"
+        listOf("yoga", "stretch", "mobility", "pilates").any(lower::contains) -> "Mobility"
+        listOf("cardio", "run", "walk", "cycle", "row").any(lower::contains) -> "Cardio"
+        else -> "General fitness"
+    }
+}
+
+private fun defaultDuration(category: String): Int {
+    val lower = category.lowercase(Locale.getDefault())
+    return when {
+        listOf("hiit", "plyometric").any(lower::contains) -> 15
+        listOf("strength", "power").any(lower::contains) -> 25
+        listOf("mobility", "yoga", "pilates").any(lower::contains) -> 20
+        else -> 18
+    }
+}
+
+private fun defaultEffort(intensity: String): Int = when (intensity) {
+    "High intensity" -> 70
+    "Strength focus" -> 60
+    "Cardio" -> 55
+    "Mobility" -> 35
+    else -> 45
 }
 
 private fun formatLabel(raw: String?): String? {

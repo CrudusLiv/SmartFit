@@ -14,8 +14,6 @@ val localProperties = Properties().apply {
 
 fun String.escapeForBuildConfig(): String = replace("\"", "\\\"")
 
-// Wger token removed — no longer required
-
 android {
     namespace = "com.example.smartfit"
     compileSdk = 35
@@ -29,7 +27,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // no build config fields required for Wger
+        val wgerToken = localProperties.getProperty("wger.token", "")
+        buildConfigField(
+            "String",
+            "WGER_TOKEN",
+            "\"${wgerToken.escapeForBuildConfig()}\""
+        )
     }
 
     buildTypes {
@@ -82,6 +85,12 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
+    // Networking
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // Coil image loading
     implementation("io.coil-kt:coil-compose:2.7.0")

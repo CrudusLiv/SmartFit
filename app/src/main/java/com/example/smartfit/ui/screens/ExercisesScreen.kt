@@ -1,6 +1,5 @@
 package com.example.smartfit.ui.screens
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -90,11 +86,15 @@ fun ExercisesScreen(
     var selectedSuggestion by remember { mutableStateOf<WorkoutSuggestion?>(null) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("All") }
-    var showAll by rememberSaveable { mutableStateOf(false) }
+    val suggestionLimit = 40
 
     LaunchedEffect(Unit) {
-        if (!uiState.suggestionsLoading && uiState.workoutSuggestions.isEmpty() && uiState.suggestionsError == null) {
-            viewModel.loadWorkoutSuggestions(limit = 20)
+        if (
+            !uiState.suggestionsLoading &&
+            uiState.suggestionsError == null &&
+            uiState.workoutSuggestions.size < suggestionLimit
+        ) {
+            viewModel.loadWorkoutSuggestions(limit = suggestionLimit)
         }
     }
 
@@ -190,18 +190,7 @@ fun ExercisesScreen(
                     }
                     val featuredSuggestions = remember(filteredSuggestions) { filteredSuggestions.take(4) }
                     val remainingSuggestions = remember(filteredSuggestions) { filteredSuggestions.drop(4) }
-                    val canExpand = remember(remainingSuggestions) { remainingSuggestions.size > 6 }
-                    val displayedSuggestions = remember(remainingSuggestions, showAll, canExpand) {
-                        when {
-                            !canExpand -> remainingSuggestions
-                            showAll -> remainingSuggestions
-                            else -> remainingSuggestions.take(6)
-                        }
-                    }
-
-                    if (!canExpand && showAll) {
-                        showAll = false
-                    }
+                    val displayedSuggestions = remember(remainingSuggestions) { remainingSuggestions }
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -219,10 +208,7 @@ fun ExercisesScreen(
                             SearchField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                onClear = {
-                                    searchQuery = ""
-                                    showAll = false
-                                }
+                                onClear = { searchQuery = "" }
                             )
                         }
 
@@ -233,7 +219,6 @@ fun ExercisesScreen(
                                     selected = selectedCategory,
                                     onSelectedChange = {
                                         selectedCategory = it
-                                        showAll = false
                                     }
                                 )
                             }
@@ -260,9 +245,8 @@ fun ExercisesScreen(
                                     onClearFilters = {
                                         selectedCategory = "All"
                                         searchQuery = ""
-                                        showAll = false
                                     },
-                                    onRefresh = { viewModel.loadWorkoutSuggestions(limit = 20) }
+                                    onRefresh = { viewModel.loadWorkoutSuggestions(limit = suggestionLimit) }
                                 )
                             }
                         } else {
@@ -273,14 +257,6 @@ fun ExercisesScreen(
                                 )
                             }
 
-                            if (canExpand) {
-                                item {
-                                    ToggleCatalogueButton(
-                                        showingAll = showAll,
-                                        onToggle = { showAll = !showAll }
-                                    )
-                                }
-                            }
                         }
 
                         item {
@@ -288,7 +264,7 @@ fun ExercisesScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                TextButton(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) {
+                                TextButton(onClick = { viewModel.loadWorkoutSuggestions(limit = suggestionLimit) }) {
                                     Icon(Icons.Default.Refresh, contentDescription = null)
                                     Spacer(Modifier.width(8.dp))
                                     Text("Refresh catalogue")
@@ -401,7 +377,7 @@ private fun buildExerciseSummary(suggestions: List<WorkoutSuggestion>): List<Sum
 
     return buildList {
         add(SummaryMetric("Workouts", total.toString(), Icons.Default.FitnessCenter))
-        avgDuration?.let { add(SummaryMetric("Avg duration", " min", Icons.Default.Speed)) }
+    avgDuration?.let { add(SummaryMetric("Avg duration", "${it} min", Icons.Default.Speed)) }
         if (focusCount > 0) {
             add(SummaryMetric("Focus groups", focusCount.toString(), Icons.Default.AutoAwesome))
         }
@@ -519,21 +495,29 @@ private fun FeaturedExerciseCard(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EssentialsGrid(
     suggestions: List<WorkoutSuggestion>,
     onSelect: (WorkoutSuggestion) -> Unit
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 180.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        userScrollEnabled = false,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        items(suggestions, key = { it.id }) { suggestion ->
-            ExerciseTile(suggestion = suggestion, onClick = { onSelect(suggestion) })
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        suggestions.chunked(2).forEach { rowSuggestions ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                rowSuggestions.forEach { suggestion ->
+                    ExerciseTile(
+                        suggestion = suggestion,
+                        onClick = { onSelect(suggestion) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (rowSuggestions.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -541,12 +525,13 @@ private fun EssentialsGrid(
 @Composable
 private fun ExerciseTile(
     suggestion: WorkoutSuggestion,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val visual = categoryVisual(suggestion.category)
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
@@ -592,7 +577,7 @@ private fun ExerciseTile(
             val highlights = buildExerciseHighlights(suggestion)
             highlights.take(3).forEach { highlight ->
                 Text(
-                    "• ",
+                    "• $highlight",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -611,19 +596,6 @@ private fun ExerciseTile(
                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
         }
-    }
-}
-
-@Composable
-private fun ToggleCatalogueButton(
-    showingAll: Boolean,
-    onToggle: () -> Unit
-) {
-    TextButton(
-        onClick = onToggle,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(if (showingAll) "Show fewer" else "Show more workouts")
     }
 }
 
@@ -659,15 +631,15 @@ private fun categoryVisual(category: String): CategoryVisual {
 private fun buildExerciseHighlights(suggestion: WorkoutSuggestion): List<String> {
     val highlights = mutableListOf<String>()
     if (suggestion.durationMinutes > 0) {
-        highlights += " min"
+        highlights += "${suggestion.durationMinutes} min"
     }
     if (suggestion.calories > 0) {
-        highlights += " kcal"
+        highlights += "${suggestion.calories} kcal"
     }
     suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }?.let { highlights += it }
     suggestion.equipment.firstOrNull()?.takeIf { it.isNotBlank() }?.let { highlights += it }
-    suggestion.averageHeartRate?.takeIf { it > 0 }?.let { highlights += "Avg HR  bpm" }
-    suggestion.steps.takeIf { it > 0 }?.let { highlights += " steps" }
+    suggestion.averageHeartRate?.takeIf { it > 0 }?.let { highlights += "Avg HR ${it} bpm" }
+    suggestion.steps.takeIf { it > 0 }?.let { highlights += "${suggestion.steps} steps" }
     return highlights
 }
 
@@ -697,8 +669,8 @@ private fun ExercisesEmptyState(
                 modifier = Modifier.size(32.dp)
             )
             val message = when {
-                searchQuery.isNotBlank() -> "No workouts match \"\""
-                selectedCategory != "All" -> "No workouts tagged "
+                searchQuery.isNotBlank() -> "No workouts match \"$searchQuery\""
+                selectedCategory != "All" -> "No workouts tagged $selectedCategory"
                 else -> "No workouts available"
             }
             Text(message, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)

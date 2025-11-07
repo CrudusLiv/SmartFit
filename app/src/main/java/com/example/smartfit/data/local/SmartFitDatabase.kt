@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [ActivityEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ActivityEntity::class], version = 2, exportSchema = false)
 abstract class SmartFitDatabase : RoomDatabase() {
     abstract fun activityDao(): ActivityDao
 
@@ -19,7 +19,9 @@ abstract class SmartFitDatabase : RoomDatabase() {
                     context.applicationContext,
                     SmartFitDatabase::class.java,
                     "smartfit_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

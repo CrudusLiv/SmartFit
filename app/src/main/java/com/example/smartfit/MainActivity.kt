@@ -83,8 +83,9 @@ class MainActivity : ComponentActivity() {
     private val viewModel: ActivityViewModel by lazy {
         val database = SmartFitDatabase.getDatabase(applicationContext)
         val activityDao = database.activityDao()
-        val googleFitDataSource = com.example.smartfit.google.GoogleFitDataSource(applicationContext)
-        val repository = ActivityRepository(activityDao, googleFitDataSource)
+    val googleFitDataSource = com.example.smartfit.google.GoogleFitDataSource(applicationContext)
+    val wgerRemoteDataSource = com.example.smartfit.data.remote.WgerRemoteDataSource.create()
+    val repository = ActivityRepository(activityDao, googleFitDataSource, wgerRemoteDataSource)
         val userPreferences = UserPreferences(applicationContext)
 
         ViewModelProvider(
