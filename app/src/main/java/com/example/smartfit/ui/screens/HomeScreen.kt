@@ -242,7 +242,7 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(uiState.suggestionsError ?: "Unknown error")
-                            Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 8) }) {
+                            Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 8, forceRefresh = true) }) {
                                 Text("Retry")
                             }
                         }
@@ -280,12 +280,12 @@ fun HomeScreen(
                                 modifier = Modifier.size(32.dp)
                             )
                             Text(
-                                "No Google Fit sessions yet",
+                                "No curated workouts yet",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                "Start a workout with Google Fit to unlock tailored ideas here.",
+                                "Browse the Wger library to discover training ideas tailored for you.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center

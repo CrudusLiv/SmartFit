@@ -131,7 +131,7 @@ fun ExercisesScreen(
                         Spacer(Modifier.height(8.dp))
                         Text(uiState.suggestionsError ?: "Unknown error")
                         Spacer(Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) {
+                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20, forceRefresh = true) }) {
                             Text("Try again")
                         }
                     }
@@ -144,7 +144,7 @@ fun ExercisesScreen(
                     ) {
                         Text("No exercises yet")
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20) }) {
+                        Button(onClick = { viewModel.loadWorkoutSuggestions(limit = 20, forceRefresh = true) }) {
                             Text("Load exercises")
                         }
                     }
@@ -246,7 +246,7 @@ fun ExercisesScreen(
                                         selectedCategory = "All"
                                         searchQuery = ""
                                     },
-                                    onRefresh = { viewModel.loadWorkoutSuggestions(limit = suggestionLimit) }
+                                    onRefresh = { viewModel.loadWorkoutSuggestions(limit = suggestionLimit, forceRefresh = true) }
                                 )
                             }
                         } else {
@@ -264,7 +264,7 @@ fun ExercisesScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                TextButton(onClick = { viewModel.loadWorkoutSuggestions(limit = suggestionLimit) }) {
+                                TextButton(onClick = { viewModel.loadWorkoutSuggestions(limit = suggestionLimit, forceRefresh = true) }) {
                                     Icon(Icons.Default.Refresh, contentDescription = null)
                                     Spacer(Modifier.width(8.dp))
                                     Text("Refresh catalogue")

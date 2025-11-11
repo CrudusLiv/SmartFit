@@ -1,5 +1,6 @@
 package com.example.smartfit.data.repository
 
+import android.net.Uri
 import android.util.Log
 import androidx.core.text.HtmlCompat
 import com.example.smartfit.data.local.ActivityDao
@@ -9,15 +10,16 @@ import com.example.smartfit.data.remote.ExerciseImage
 import com.example.smartfit.data.remote.ExerciseInfo
 import com.example.smartfit.data.remote.ExerciseInfoResponse
 import com.example.smartfit.data.remote.WgerRemoteDataSource
-import com.example.smartfit.google.GoogleFitDataSource
-import com.example.smartfit.google.GoogleFitDataSource.FitWorkout
 import java.util.Locale
-import kotlin.math.min
+import kotlin.jvm.Volatile
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 sealed class Result<out T> {
@@ -28,10 +30,23 @@ sealed class Result<out T> {
 
 class ActivityRepository(
     private val activityDao: ActivityDao,
-    private val googleFitDataSource: GoogleFitDataSource,
     private val wgerRemoteDataSource: WgerRemoteDataSource
 ) {
-    companion object { private const val TAG = "ActivityRepository" }
+    companion object {
+        private const val TAG = "ActivityRepository"
+        private const val CATALOGUE_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+        private const val WGER_PAGE_SIZE = 100
+        private const val MAX_WGER_PAGES = 60
+        private const val MAX_CATALOGUE_SAMPLE = 250
+    }
+
+    private val catalogueCacheMutex = Mutex()
+
+    @Volatile
+    private var catalogueCache: CatalogueCache? = null
+
+    @Volatile
+    private var lastCatalogueRefresh = 0L
 
     fun getAllActivities(): Flow<List<ActivityEntity>> = activityDao.getAllActivities()
 
@@ -61,26 +76,32 @@ class ActivityRepository(
             activityDao.getTotalByTypeAndDateRange(type, startDate, endDate) ?: 0
         }
 
-    fun getExercisesFromGoogleFit(limit: Int = 20, offset: Int = 0): Flow<Result<ExerciseInfoResponse>> = flow {
+    fun getExercises(limit: Int = 20, offset: Int = 0): Flow<Result<ExerciseInfoResponse>> = flow {
         emit(Result.Loading)
         try {
-            val fitResponse = googleFitDataSource.fetchExercises(limit = limit, offset = offset)
-            val wgerResponse = try {
-                wgerRemoteDataSource.fetchExercises(limit = limit, offset = offset)
-            } catch (catalogueError: Exception) {
-                Log.w(TAG, "Unable to load catalogue exercises", catalogueError)
-                fitResponse
+            var cache = ensureCatalogueCacheLoaded()
+            if (cache.exercises.isEmpty()) {
+                cache = ensureCatalogueCacheLoaded(forceRefresh = true)
             }
-            val merged = mergeExerciseResponses(fitResponse, wgerResponse, limit)
-            emit(Result.Success(merged))
+
+            val safeOffset = offset.coerceAtLeast(0)
+            val safeLimit = limit.coerceAtLeast(1)
+
+            if (cache.exercises.isEmpty()) {
+                throw IllegalStateException("Catalogue is unavailable")
+            }
+
+            val results = cache.exercises.drop(safeOffset).take(safeLimit)
+            val response = ExerciseInfoResponse(
+                count = cache.exercises.size,
+                next = null,
+                previous = null,
+                results = results
+            )
+            emit(Result.Success(response))
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching exercises", e)
-            try {
-                val fallback = wgerRemoteDataSource.fetchExercises(limit = limit, offset = offset)
-                emit(Result.Success(fallback))
-            } catch (_: Exception) {
-                emit(Result.Error(e))
-            }
+            emit(Result.Error(e))
         }
     }.catch { throwable ->
         emit(Result.Error(Exception(throwable)))
@@ -89,51 +110,76 @@ class ActivityRepository(
     fun getWorkoutSuggestions(limit: Int = 12, offset: Int = 0): Flow<Result<List<WorkoutSuggestion>>> = flow {
         emit(Result.Loading)
         try {
-            val fetchLimit = (limit * 3).coerceAtLeast(limit)
-            val workouts = googleFitDataSource.fetchWorkouts(limit = fetchLimit, offset = offset)
-            val googleSuggestions = workouts
-                .asSequence()
-                .map(::mapWorkoutToSuggestion)
-                .distinctBy { it.id }
-                .toList()
-            val remoteLimit = min(limit * 2, 60)
-            val cataloguePrimary = try {
-                fetchCatalogueSuggestions(remoteLimit, offset)
-            } catch (catalogueError: Exception) {
-                Log.w(TAG, "Unable to load catalogue suggestions", catalogueError)
+            Log.d(TAG, "Loading workout suggestions: limit=$limit, offset=$offset")
+            var cache = ensureCatalogueCacheLoaded()
+            Log.d(TAG, "Initial cache loaded: ${cache.suggestions.size} suggestions available")
+            
+            if (cache.suggestions.isEmpty()) {
+                Log.w(TAG, "Cache empty, forcing refresh")
+                cache = ensureCatalogueCacheLoaded(forceRefresh = true)
+                Log.d(TAG, "After refresh: ${cache.suggestions.size} suggestions available")
+            }
+
+            val targetCount = if (limit > 0) limit else 1
+            val suggestions = if (cache.suggestions.isNotEmpty()) {
+                val pool = if (cache.suggestions.size > MAX_CATALOGUE_SAMPLE) {
+                    cache.suggestions.shuffled(Random(System.nanoTime())).take(MAX_CATALOGUE_SAMPLE)
+                } else {
+                    cache.suggestions
+                }
+                if (pool.size <= targetCount) pool else pool.shuffled(Random(System.nanoTime())).take(targetCount)
+            } else {
+                Log.w(TAG, "Cache still empty after refresh, using fallback")
                 emptyList()
             }
 
-            var merged = blendSuggestions(limit, cataloguePrimary, googleSuggestions)
-
-            if (merged.size < limit) {
-                val additional = try {
-                    fetchCatalogueSuggestions((limit - merged.size) * 2, offset + remoteLimit)
-                } catch (catalogueError: Exception) {
-                    Log.w(TAG, "Additional catalogue fetch failed", catalogueError)
-                    emptyList()
-                }
-                val expandedCatalogue = cataloguePrimary + additional
-                merged = blendSuggestions(limit, expandedCatalogue, googleSuggestions)
+            val finalSuggestions = if (suggestions.isEmpty()) {
+                Log.i(TAG, "Using fallback workout suggestions")
+                fallbackWorkoutSuggestions()
+                    .shuffled(Random(System.nanoTime()))
+                    .take(targetCount)
+            } else {
+                Log.i(TAG, "Returning ${suggestions.size} Wger suggestions")
+                suggestions
             }
 
-            emit(Result.Success(merged))
+            emit(Result.Success(finalSuggestions))
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching workout suggestions", e)
-            try {
-                val fallback = fetchCatalogueSuggestions(limit * 2, offset)
-                if (fallback.isNotEmpty()) {
-                    emit(Result.Success(fallback.take(limit)))
-                } else {
-                    emit(Result.Error(e))
-                }
-            } catch (catalogueError: Exception) {
-                emit(Result.Error(e))
-            }
+            Log.e(TAG, "Error streaming workout suggestions", e)
+            val targetCount = if (limit > 0) limit else 1
+            val fallback = fallbackWorkoutSuggestions()
+                .shuffled(Random(System.nanoTime()))
+                .take(targetCount)
+            emit(Result.Success(fallback))
         }
     }.catch { throwable ->
-        emit(Result.Error(Exception(throwable)))
+        Log.e(TAG, "Error streaming workout suggestions", throwable)
+        val targetCount = if (limit > 0) limit else 1
+        val fallback = fallbackWorkoutSuggestions()
+            .shuffled(Random(System.nanoTime()))
+            .take(targetCount)
+        emit(Result.Success(fallback))
     }.flowOn(Dispatchers.IO)
+
+    suspend fun testWgerApiConnection(): String {
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.i(TAG, "Testing Wger API connection...")
+                val response = wgerRemoteDataSource.fetchExercises(limit = 1, offset = 0)
+                val message = "✅ API Connected! Count: ${response.count}, Results: ${response.results.size}"
+                Log.i(TAG, message)
+                if (response.results.isNotEmpty()) {
+                    val first = response.results[0]
+                    Log.i(TAG, "First exercise: id=${first.id}, name=${first.name}")
+                }
+                message
+            } catch (e: Exception) {
+                val message = "❌ API Error: ${e.message}"
+                Log.e(TAG, message, e)
+                message
+            }
+        }
+    }
 
     fun calculateCaloriesBurned(activityType: String, durationMinutes: Int, weightKg: Float): Int {
         if (durationMinutes <= 0 || weightKg <= 0f) return 0
@@ -162,103 +208,144 @@ class ActivityRepository(
         activityDao.getActivityById(id)
     }
 
-    private suspend fun fetchCatalogueSuggestions(limit: Int, offset: Int): List<WorkoutSuggestion> {
-        val safeLimit = limit.coerceIn(1, 100)
-        val response = wgerRemoteDataSource.fetchExercises(limit = safeLimit, offset = offset)
-        return response.results
-            .asSequence()
-            .mapIndexed { index, info -> mapExerciseToSuggestion(info, offset + index) }
-            .filterNotNull()
-            .distinctBy { it.id }
-            .toList()
+    suspend fun refreshCatalogueCache() {
+        catalogueCacheMutex.withLock {
+            catalogueCache = null
+            lastCatalogueRefresh = 0L
+        }
     }
-}
 
-private fun blendSuggestions(
-    limit: Int,
-    vararg sources: List<WorkoutSuggestion>
-): List<WorkoutSuggestion> {
-    if (sources.isEmpty()) return emptyList()
-    val result = mutableListOf<WorkoutSuggestion>()
-    val seen = mutableSetOf<Int>()
-    var index = 0
-    while (result.size < limit) {
-        var added = false
-        for (source in sources) {
-            if (index < source.size) {
-                val candidate = source[index]
-                if (seen.add(candidate.id)) {
-                    result += candidate
-                    added = true
-                    if (result.size == limit) break
+    private suspend fun ensureCatalogueCacheLoaded(forceRefresh: Boolean = false): CatalogueCache {
+        val now = System.currentTimeMillis()
+        val cachedSnapshot = catalogueCache
+        val cacheStale = cachedSnapshot == null || now - lastCatalogueRefresh > CATALOGUE_CACHE_TTL_MS
+        if (!forceRefresh && cachedSnapshot != null && !cacheStale) {
+            return cachedSnapshot
+        }
+
+        return catalogueCacheMutex.withLock {
+            val innerSnapshot = catalogueCache
+            val innerStale = innerSnapshot == null || forceRefresh || System.currentTimeMillis() - lastCatalogueRefresh > CATALOGUE_CACHE_TTL_MS
+            if (!innerStale && innerSnapshot != null) {
+                return@withLock innerSnapshot
+            }
+
+            val loaded = loadFullCatalogue()
+            if (loaded.suggestions.isNotEmpty()) {
+                catalogueCache = loaded
+                lastCatalogueRefresh = System.currentTimeMillis()
+            } else if (catalogueCache != null && !forceRefresh) {
+                return@withLock catalogueCache!!
+            }
+
+            return@withLock loaded
+        }
+    }
+
+    private suspend fun loadFullCatalogue(): CatalogueCache {
+        val exerciseMap = linkedMapOf<Int, ExerciseInfo>()
+        val suggestionMap = linkedMapOf<Int, WorkoutSuggestion>()
+
+        var offsetCursor = 0
+        var pageCount = 0
+
+        Log.d(TAG, "Starting full catalogue load from Wger API")
+
+        while (pageCount < MAX_WGER_PAGES) {
+            val response = try {
+                Log.d(TAG, "Fetching page $pageCount at offset $offsetCursor")
+                wgerRemoteDataSource.fetchExercises(limit = WGER_PAGE_SIZE, offset = offsetCursor)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch Wger catalogue page $pageCount at offset $offsetCursor", e)
+                if (exerciseMap.isEmpty()) throw e else break
+            }
+
+            Log.d(TAG, "Page $pageCount returned ${response.results.size} results, total count: ${response.count}")
+
+            if (response.results.isEmpty()) {
+                Log.w(TAG, "Empty results at page $pageCount, stopping")
+                break
+            }
+
+            response.results.forEachIndexed { index, info ->
+                val key = uniqueExerciseKey(info, offsetCursor + index)
+                if (!exerciseMap.containsKey(key)) {
+                    exerciseMap[key] = info
+                }
+                val suggestion = mapExerciseToSuggestion(info, offsetCursor + index)
+                if (suggestion != null) {
+                    suggestionMap.putIfAbsent(suggestion.id, suggestion)
                 }
             }
+
+            val nextOffset = parseOffsetFromNext(response.next)
+            if (nextOffset != null && nextOffset > offsetCursor) {
+                offsetCursor = nextOffset
+            } else {
+                offsetCursor += response.results.size
+            }
+
+            if (response.next.isNullOrBlank()) {
+                Log.d(TAG, "No next page URL, stopping at page $pageCount")
+                break
+            }
+            pageCount++
         }
-        if (!added) break
-        index++
+
+        Log.i(TAG, "Catalogue load complete: ${exerciseMap.size} exercises, ${suggestionMap.size} suggestions")
+
+        return CatalogueCache(
+            exercises = exerciseMap.values.toList(),
+            suggestions = suggestionMap.values.toList()
+        )
     }
-    return result
+
+    private fun parseOffsetFromNext(next: String?): Int? {
+        if (next.isNullOrBlank()) return null
+        return runCatching {
+            Uri.parse(next).getQueryParameter("offset")?.toInt()
+        }.getOrNull()
+    }
+
 }
 
-private fun mergeExerciseResponses(
-    fitResponse: ExerciseInfoResponse,
-    wgerResponse: ExerciseInfoResponse,
-    limit: Int
-): ExerciseInfoResponse {
-    val merged = mutableListOf<ExerciseInfo>()
-    val seen = mutableSetOf<Int>()
-
-    fun addUnique(info: ExerciseInfo) {
-        if (merged.size >= limit) return
-        val key = uniqueExerciseId(info)
-        if (seen.add(key)) {
-            merged += info
-        }
-    }
-
-    wgerResponse.results.forEach(::addUnique)
-    if (merged.size < limit) {
-        fitResponse.results.forEach(::addUnique)
-    }
-
-    val candidateCounts = listOfNotNull(
-        wgerResponse.count?.takeIf { it > 0 },
-        fitResponse.count?.takeIf { it > 0 },
-        merged.size
-    )
-
-    val totalCount = candidateCounts.maxOrNull() ?: merged.size
-
-    return ExerciseInfoResponse(
-        count = totalCount,
-        next = wgerResponse.next ?: fitResponse.next,
-        previous = wgerResponse.previous ?: fitResponse.previous,
-        results = merged
-    )
-}
-
-private fun uniqueExerciseId(info: ExerciseInfo): Int =
-    info.id ?: info.name?.hashCode() ?: info.hashCode()
+private const val TAG = "ActivityRepository"
 
 private fun mapExerciseToSuggestion(info: ExerciseInfo, position: Int): WorkoutSuggestion? {
-    val id = info.id ?: (info.name?.hashCode() ?: position)
-    val name = info.name?.takeIf { it.isNotBlank() } ?: return null
-    val category = info.category?.name?.takeIf { it.isNotBlank() } ?: "General"
+    val id = uniqueExerciseKey(info, position)
+    
+    // The exerciseinfo endpoint doesn't have a name field, construct one from available data
+    val categoryName = info.category?.name?.takeIf { it.isNotBlank() } ?: "Exercise"
+    
+    // Try to extract a meaningful name from the description or use category + ID
+    val name = when {
+        !info.description.isNullOrBlank() -> {
+            // Extract first sentence or first 50 chars from description as name
+            val desc = HtmlCompat.fromHtml(info.description, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
+            val firstLine = desc.lines().firstOrNull { it.isNotBlank() }?.take(50) ?: categoryName
+            if (firstLine.length < 3) "$categoryName Exercise" else firstLine
+        }
+        info.id != null -> "$categoryName Exercise #${info.id}"
+        else -> "$categoryName Exercise"
+    }
+    
+    Log.d(TAG, "Mapped exercise $id: name='$name', category='$categoryName'")
+    
     val muscles = info.muscles.mapNotNull { it.name_en ?: it.name }.filter { it.isNotBlank() }
     val equipment = info.equipment.mapNotNull { it.name }.filter { it.isNotBlank() }
     val imageUrl = resolveImageUrl(info.images)
     val description = sanitizeDescription(info.description)
-    val intensity = guessIntensity(category)
+    val intensity = guessIntensity(categoryName)
 
     return WorkoutSuggestion(
         id = id,
         name = name.trim(),
-        category = category.trim(),
-        primaryMuscles = muscles.ifEmpty { listOf(category) },
+        category = categoryName.trim(),
+        primaryMuscles = muscles.ifEmpty { listOf(categoryName) },
         equipment = equipment.ifEmpty { listOf("Bodyweight") },
         imageUrl = imageUrl,
         description = description,
-        durationMinutes = defaultDuration(category),
+        durationMinutes = defaultDuration(categoryName),
         calories = 0,
         distanceKm = null,
         steps = 0,
@@ -317,86 +404,127 @@ private fun defaultEffort(intensity: String): Int = when (intensity) {
     else -> 45
 }
 
-private fun formatLabel(raw: String?): String? {
-    val trimmed = raw?.trim().orEmpty()
-    if (trimmed.isBlank()) return null
-    return trimmed
-        .split(Regex("\\s+"))
-        .joinToString(" ") { part ->
-            part.lowercase(Locale.getDefault()).replaceFirstChar { char ->
-                if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
-            }
-        }
-}
-
-private fun mapWorkoutToSuggestion(workout: FitWorkout): WorkoutSuggestion {
-    val muscles = workout.focusAreas.mapNotNull(::formatLabel).ifEmpty { listOf(formatLabel(workout.activity) ?: "General Fitness") }
-    val equipment = workout.equipment.mapNotNull(::formatLabel).ifEmpty { listOf("Bodyweight") }
-    val description = buildWorkoutDescription(workout)
-
-    return WorkoutSuggestion(
-        id = workout.id,
-        name = workout.title.ifBlank { formatLabel(workout.activity) ?: "SmartFit Session" },
-        category = formatLabel(workout.activity).orEmpty().ifBlank { workout.intensityLabel },
-        primaryMuscles = muscles,
-        equipment = equipment,
-        imageUrl = workoutImageUrl(workout.activity),
-        description = description,
-        durationMinutes = workout.durationMinutes,
-        calories = workout.calories,
-        distanceKm = workout.distanceKm,
-        steps = workout.steps,
-        startTimeMillis = workout.startTimeMillis,
-        intensityLabel = workout.intensityLabel,
-        effortScore = workout.effortScore,
-        averageHeartRate = workout.averageHeartRate,
-        maxHeartRate = workout.maxHeartRate,
-        averagePaceMinutesPerKm = workout.averagePaceMinutesPerKm
+private fun fallbackWorkoutSuggestions(): List<WorkoutSuggestion> = listOf(
+    WorkoutSuggestion(
+        id = -101,
+        name = "Total Body HIIT",
+        category = "HIIT",
+        primaryMuscles = listOf("Full Body"),
+        equipment = listOf("Bodyweight"),
+        imageUrl = "https://images.unsplash.com/photo-1546484955-0bce7fefc357?auto=format&fit=crop&w=1200&q=80",
+        description = "A fast-paced circuit mixing squats, burpees, and mountain climbers to spike your heart rate.",
+        durationMinutes = 18,
+        calories = 0,
+        distanceKm = null,
+        steps = 0,
+        startTimeMillis = null,
+        intensityLabel = "High intensity",
+        effortScore = 70,
+        averageHeartRate = null,
+        maxHeartRate = null,
+        averagePaceMinutesPerKm = null
+    ),
+    WorkoutSuggestion(
+        id = -102,
+        name = "Strength Push Day",
+        category = "Strength",
+        primaryMuscles = listOf("Chest", "Shoulders", "Triceps"),
+        equipment = listOf("Dumbbells"),
+        imageUrl = "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
+        description = "Pressing-focused session alternating between push-ups, overhead presses, and dips.",
+        durationMinutes = 25,
+        calories = 0,
+        distanceKm = null,
+        steps = 0,
+        startTimeMillis = null,
+        intensityLabel = "Strength focus",
+        effortScore = 60,
+        averageHeartRate = null,
+        maxHeartRate = null,
+        averagePaceMinutesPerKm = null
+    ),
+    WorkoutSuggestion(
+        id = -103,
+        name = "Mobility Reset",
+        category = "Mobility",
+        primaryMuscles = listOf("Hips", "Back"),
+        equipment = listOf("Mat"),
+        imageUrl = "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80",
+        description = "Slow flow opening the thoracic spine, hip flexors, and hamstrings to restore range of motion.",
+        durationMinutes = 20,
+        calories = 0,
+        distanceKm = null,
+        steps = 0,
+        startTimeMillis = null,
+        intensityLabel = "Mobility",
+        effortScore = 35,
+        averageHeartRate = null,
+        maxHeartRate = null,
+        averagePaceMinutesPerKm = null
+    ),
+    WorkoutSuggestion(
+        id = -104,
+        name = "Endurance Ride",
+        category = "Cardio",
+        primaryMuscles = listOf("Legs", "Glutes"),
+        equipment = listOf("Stationary Bike"),
+        imageUrl = "https://images.unsplash.com/photo-1507831228885-004b65a06f4c?auto=format&fit=crop&w=1200&q=80",
+        description = "Steady-state cycling blocks layered with cadence surges for aerobic conditioning.",
+        durationMinutes = 30,
+        calories = 0,
+        distanceKm = null,
+        steps = 0,
+        startTimeMillis = null,
+        intensityLabel = "Cardio",
+        effortScore = 55,
+        averageHeartRate = null,
+        maxHeartRate = null,
+        averagePaceMinutesPerKm = null
+    ),
+    WorkoutSuggestion(
+        id = -105,
+        name = "Trail Run Prep",
+        category = "Cardio",
+        primaryMuscles = listOf("Legs", "Core"),
+        equipment = listOf("Bodyweight"),
+        imageUrl = "https://images.unsplash.com/photo-1546484959-f9a94a30713e?auto=format&fit=crop&w=1200&q=80",
+        description = "Interval jogs paired with uphill bounding drills to build toughness for trail adventures.",
+        durationMinutes = 22,
+        calories = 0,
+        distanceKm = null,
+        steps = 0,
+        startTimeMillis = null,
+        intensityLabel = "Cardio",
+        effortScore = 55,
+        averageHeartRate = null,
+        maxHeartRate = null,
+        averagePaceMinutesPerKm = null
+    ),
+    WorkoutSuggestion(
+        id = -106,
+        name = "Core Focus",
+        category = "Strength",
+        primaryMuscles = listOf("Core"),
+        equipment = listOf("Mat"),
+        imageUrl = "https://images.unsplash.com/photo-1554284126-aa88f22d8b74?auto=format&fit=crop&w=1200&q=80",
+        description = "Rotational planks, hollow holds, and anti-rotation presses to stabilise your midline.",
+        durationMinutes = 18,
+        calories = 0,
+        distanceKm = null,
+        steps = 0,
+        startTimeMillis = null,
+        intensityLabel = "Strength focus",
+        effortScore = 50,
+        averageHeartRate = null,
+        maxHeartRate = null,
+        averagePaceMinutesPerKm = null
     )
-}
+)
 
-private fun buildWorkoutDescription(workout: FitWorkout): String {
-    val metrics = mutableListOf<String>()
-    metrics += "${workout.durationMinutes} min"
-    if ((workout.distanceKm ?: 0.0) > 0.0) {
-        metrics += String.format(Locale.getDefault(), "%.2f km", workout.distanceKm)
-    }
-    if (workout.steps > 0) {
-        metrics += "${workout.steps} steps"
-    }
-    if (workout.calories > 0) {
-        metrics += "${workout.calories} kcal"
-    }
-    workout.averagePaceMinutesPerKm?.takeIf { it > 0.0 }?.let { pace ->
-        metrics += String.format(Locale.getDefault(), "%.1f min/km", pace)
-    }
-    workout.averageHeartRate?.takeIf { it > 0 }?.let { bpm ->
-        metrics += "$bpm bpm avg"
-    }
+private fun uniqueExerciseKey(info: ExerciseInfo, fallback: Int): Int =
+    info.id ?: (info.name?.hashCode() ?: fallback)
 
-    val builder = StringBuilder()
-    builder.append(workout.intensityLabel)
-    if (metrics.isNotEmpty()) {
-        builder.append(" • ").append(metrics.joinToString(" • "))
-    }
-
-    workout.notes?.takeIf { it.isNotBlank() }?.let { note ->
-        builder.append('\n').append(note.trim())
-    }
-
-    return builder.toString()
-}
-
-private fun workoutImageUrl(activityName: String): String? {
-    val normalized = activityName.lowercase(Locale.getDefault())
-    return when {
-        normalized.contains("run") -> "https://images.unsplash.com/photo-1546484959-f9a94a30713e?auto=format&fit=crop&w=1200&q=80"
-        normalized.contains("walk") -> "https://images.unsplash.com/photo-1526403228-eda4a702e8c8?auto=format&fit=crop&w=1200&q=80"
-        normalized.contains("cycle") || normalized.contains("bike") -> "https://images.unsplash.com/photo-1507831228885-004b65a06f4c?auto=format&fit=crop&w=1200&q=80"
-        normalized.contains("swim") -> "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1200&q=80"
-        normalized.contains("yoga") -> "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80"
-        normalized.contains("strength") || normalized.contains("gym") -> "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80"
-        normalized.contains("hiit") || normalized.contains("interval") -> "https://images.unsplash.com/photo-1546484955-0bce7fefc357?auto=format&fit=crop&w=1200&q=80"
-        else -> "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=1200&q=80"
-    }
-}
+private data class CatalogueCache(
+    val exercises: List<ExerciseInfo>,
+    val suggestions: List<WorkoutSuggestion>
+)

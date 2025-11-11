@@ -128,7 +128,7 @@ class ActivityViewModel(
 
     fun loadExercises(limit: Int = 20, offset: Int = 0) {
         viewModelScope.launch {
-            repository.getExercisesFromGoogleFit(limit, offset).collect { result ->
+            repository.getExercises(limit, offset).collect { result ->
                 when (result) {
                     is Result.Loading -> _uiState.update { it.copy(isLoading = true, error = null) }
                     is Result.Success -> _uiState.update {
@@ -150,8 +150,15 @@ class ActivityViewModel(
         }
     }
 
-    fun loadWorkoutSuggestions(limit: Int = 8, offset: Int = 0) {
+    fun loadWorkoutSuggestions(limit: Int = 8, offset: Int = 0, forceRefresh: Boolean = false) {
         viewModelScope.launch {
+            if (forceRefresh) {
+                try {
+                    repository.refreshCatalogueCache()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Unable to refresh catalogue cache", e)
+                }
+            }
             repository.getWorkoutSuggestions(limit, offset).collect { result ->
                 when (result) {
                     is Result.Loading -> _uiState.update {
@@ -173,6 +180,13 @@ class ActivityViewModel(
                     }
                 }
             }
+        }
+    }
+
+    fun testWgerConnection(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.testWgerApiConnection()
+            onResult(result)
         }
     }
 

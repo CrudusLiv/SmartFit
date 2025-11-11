@@ -1,5 +1,6 @@
 package com.example.smartfit.data.remote
 
+import android.util.Log
 import com.example.smartfit.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -10,14 +11,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 class WgerRemoteDataSource private constructor(
     private val apiService: WgerApiService
 ) {
-
-    suspend fun fetchExercises(limit: Int, offset: Int): ExerciseInfoResponse {
-        val safeLimit = limit.coerceIn(1, MAX_PAGE_SIZE)
-        val safeOffset = offset.coerceAtLeast(0)
-        return apiService.getExercises(limit = safeLimit, offset = safeOffset)
-    }
-
     companion object {
+        private const val TAG = "WgerRemoteDataSource"
         private const val BASE_URL = "https://wger.de/api/v2/"
         private const val MAX_PAGE_SIZE = 100
 
@@ -30,6 +25,9 @@ class WgerRemoteDataSource private constructor(
 
                 if (token.isNotBlank()) {
                     requestBuilder.header("Authorization", "Token $token")
+                    Log.d(TAG, "Using Wger API token")
+                } else {
+                    Log.w(TAG, "No Wger API token configured")
                 }
 
                 chain.proceed(requestBuilder.build())
@@ -40,7 +38,7 @@ class WgerRemoteDataSource private constructor(
 
             if (BuildConfig.DEBUG) {
                 val logging = HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BASIC
+                    level = HttpLoggingInterceptor.Level.BODY
                 }
                 clientBuilder.addInterceptor(logging)
             }
@@ -53,5 +51,14 @@ class WgerRemoteDataSource private constructor(
 
             return WgerRemoteDataSource(retrofit.create(WgerApiService::class.java))
         }
+    }
+
+    suspend fun fetchExercises(limit: Int, offset: Int): ExerciseInfoResponse {
+        val safeLimit = limit.coerceIn(1, MAX_PAGE_SIZE)
+        val safeOffset = offset.coerceAtLeast(0)
+        Log.d(TAG, "Fetching exercises: limit=$safeLimit, offset=$safeOffset")
+        val response = apiService.getExercises(limit = safeLimit, offset = safeOffset)
+        Log.d(TAG, "Response received: count=${response.count}, results=${response.results.size}")
+        return response
     }
 }
