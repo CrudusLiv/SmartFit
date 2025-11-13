@@ -84,8 +84,6 @@ fun ExercisesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedSuggestion by remember { mutableStateOf<WorkoutSuggestion?>(null) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var selectedCategory by rememberSaveable { mutableStateOf("All") }
     val suggestionLimit = 40
 
     LaunchedEffect(Unit) {
@@ -151,46 +149,11 @@ fun ExercisesScreen(
                 }
 
                 else -> {
-                    val categories = remember(uiState.workoutSuggestions) {
-                        buildList {
-                            add("All")
-                            uiState.workoutSuggestions
-                                .mapNotNull { suggestion ->
-                                    suggestion.category.takeIf { it.isNotBlank() }
-                                }
-                                .distinct()
-                                .sortedBy { it.lowercase(Locale.getDefault()) }
-                                .forEach { add(it) }
-                        }
-                    }
-
-                    if (selectedCategory !in categories) {
-                        selectedCategory = "All"
-                    }
-
-                    val filteredSuggestions = remember(uiState.workoutSuggestions, selectedCategory, searchQuery) {
-                        val query = searchQuery.trim()
-                        uiState.workoutSuggestions.filter { suggestion ->
-                            val matchesCategory = selectedCategory == "All" ||
-                                suggestion.category.equals(selectedCategory, ignoreCase = true)
-                            val searchableFields = listOf(
-                                suggestion.name,
-                                suggestion.category,
-                                suggestion.intensityLabel
-                            ) + suggestion.primaryMuscles + suggestion.equipment
-                            val matchesQuery = query.isBlank() || searchableFields.any { field ->
-                                field.contains(query, ignoreCase = true)
-                            }
-                            matchesCategory && matchesQuery
-                        }
-                    }
-
                     val summaryMetrics = remember(uiState.workoutSuggestions) {
                         buildExerciseSummary(uiState.workoutSuggestions)
                     }
-                    val featuredSuggestions = remember(filteredSuggestions) { filteredSuggestions.take(4) }
-                    val remainingSuggestions = remember(filteredSuggestions) { filteredSuggestions.drop(4) }
-                    val displayedSuggestions = remember(remainingSuggestions) { remainingSuggestions }
+                    val featuredSuggestions = remember(uiState.workoutSuggestions) { uiState.workoutSuggestions.take(4) }
+                    val displayedSuggestions = remember(uiState.workoutSuggestions) { uiState.workoutSuggestions.drop(4) }
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -202,26 +165,6 @@ fun ExercisesScreen(
                                 hasBackAction = onNavigateBack != null,
                                 onBack = onNavigateBack
                             )
-                        }
-
-                        item {
-                            SearchField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                onClear = { searchQuery = "" }
-                            )
-                        }
-
-                        if (categories.size > 1) {
-                            item {
-                                CategorySelector(
-                                    categories = categories,
-                                    selected = selectedCategory,
-                                    onSelectedChange = {
-                                        selectedCategory = it
-                                    }
-                                )
-                            }
                         }
 
                         if (summaryMetrics.isNotEmpty()) {
@@ -240,12 +183,9 @@ fun ExercisesScreen(
                         if (displayedSuggestions.isEmpty()) {
                             item {
                                 ExercisesEmptyState(
-                                    selectedCategory = selectedCategory,
-                                    searchQuery = searchQuery,
-                                    onClearFilters = {
-                                        selectedCategory = "All"
-                                        searchQuery = ""
-                                    },
+                                    selectedCategory = "All",
+                                    searchQuery = "",
+                                    onClearFilters = {},
                                     onRefresh = { viewModel.loadWorkoutSuggestions(limit = suggestionLimit, forceRefresh = true) }
                                 )
                             }
@@ -479,6 +419,18 @@ private fun FeaturedExerciseCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            
+            // Show description preview if available
+            suggestion.description.takeIf { it.isNotBlank() }?.let { desc ->
+                Text(
+                    text = desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
             suggestion.intensityLabel.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
@@ -562,15 +514,28 @@ private fun ExerciseTile(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    suggestion.intensityLabel.takeIf { it.isNotBlank() }
-                        ?: suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }
-                        ?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    
+                    // Show description preview if available
+                    suggestion.description.takeIf { it.isNotBlank() }?.let { desc ->
+                        Text(
+                            text = desc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    } ?: run {
+                        // Fallback to intensity or first muscle if no description
+                        suggestion.intensityLabel.takeIf { it.isNotBlank() }
+                            ?: suggestion.primaryMuscles.firstOrNull()?.takeIf { it.isNotBlank() }
+                            ?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                    }
                 }
             }
 

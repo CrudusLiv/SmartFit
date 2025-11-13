@@ -714,6 +714,17 @@ private fun WorkoutSuggestionCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
+                // Show description preview
+                suggestion.description.takeIf { it.isNotBlank() }?.let { desc ->
+                    Text(
+                        text = desc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
                 suggestion.intensityLabel.takeIf { it.isNotBlank() }?.let { intensity ->
                     AssistChip(
                         onClick = {},

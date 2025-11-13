@@ -268,6 +268,11 @@ class ActivityRepository(
             }
 
             response.results.forEachIndexed { index, info ->
+                // Only include exercises that have actual descriptions
+                if (info.description.isNullOrBlank()) {
+                    return@forEachIndexed
+                }
+                
                 val key = uniqueExerciseKey(info, offsetCursor + index)
                 if (!exerciseMap.containsKey(key)) {
                     exerciseMap[key] = info
@@ -329,12 +334,38 @@ private fun mapExerciseToSuggestion(info: ExerciseInfo, position: Int): WorkoutS
         else -> "$categoryName Exercise"
     }
     
-    Log.d(TAG, "Mapped exercise $id: name='$name', category='$categoryName'")
-    
     val muscles = info.muscles.mapNotNull { it.name_en ?: it.name }.filter { it.isNotBlank() }
     val equipment = info.equipment.mapNotNull { it.name }.filter { it.isNotBlank() }
     val imageUrl = resolveImageUrl(info.images)
-    val description = sanitizeDescription(info.description)
+    
+    // Sanitize description - keep the full HTML content for instructions
+    val rawDescription = sanitizeDescription(info.description)
+    
+    // If no description available, create one from exercise metadata
+    val description = if (rawDescription.isBlank()) {
+        buildString {
+            if (muscles.isNotEmpty()) {
+                append("Targets: ${muscles.joinToString(", ")}")
+            }
+            if (equipment.isNotEmpty()) {
+                if (isNotEmpty()) append(". ")
+                append("Equipment: ${equipment.joinToString(", ")}")
+            }
+            if (isEmpty()) {
+                append("$categoryName exercise")
+            }
+        }
+    } else {
+        rawDescription
+    }
+    
+    // Log first few exercises to debug description content
+    if (position < 3) {
+        Log.d(TAG, "Exercise $id sample:")
+        Log.d(TAG, "  Raw description length: ${info.description?.length ?: 0}")
+        Log.d(TAG, "  Final description: ${description.take(150)}")
+    }
+    
     val intensity = guessIntensity(categoryName)
 
     return WorkoutSuggestion(
@@ -366,13 +397,21 @@ private fun resolveImageUrl(images: List<ExerciseImage>): String? {
 }
 
 private fun sanitizeDescription(raw: String?): String {
-    if (raw.isNullOrBlank()) return "No description available."
+    if (raw.isNullOrBlank()) return ""
+    
+    // Parse HTML and extract text content
     val text = HtmlCompat.fromHtml(raw, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
-    if (text.isNotBlank()) return text
-    return raw.replace(Regex("<[^>]*>"), " ")
+    
+    // If we got meaningful text from HTML parsing, return it
+    if (text.isNotBlank() && text.length > 5) return text
+    
+    // Fallback: strip HTML tags manually and clean up whitespace
+    val cleaned = raw
+        .replace(Regex("<[^>]*>"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
-        .ifBlank { "No description available." }
+    
+    return cleaned
 }
 
 private fun guessIntensity(category: String): String {
