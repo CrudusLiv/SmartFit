@@ -55,32 +55,59 @@ class ActivityRepository(
 
     suspend fun insertActivity(activity: ActivityEntity) {
         withContext(Dispatchers.IO) {
-            activityDao.insertActivity(activity)
+            Log.d(TAG, "Inserting activity: type=${activity.type}, duration=${activity.duration}min, value=${activity.value}")
+            try {
+                activityDao.insertActivity(activity)
+                Log.i(TAG, "Activity inserted successfully: id=${activity.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to insert activity: ${e.message}", e)
+                throw e
+            }
         }
     }
 
     suspend fun updateActivity(activity: ActivityEntity) {
         withContext(Dispatchers.IO) {
-            activityDao.updateActivity(activity)
+            Log.d(TAG, "Updating activity: id=${activity.id}, type=${activity.type}, duration=${activity.duration}min")
+            try {
+                activityDao.updateActivity(activity)
+                Log.i(TAG, "Activity updated successfully: id=${activity.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update activity: ${e.message}", e)
+                throw e
+            }
         }
     }
 
     suspend fun deleteActivity(activity: ActivityEntity) {
         withContext(Dispatchers.IO) {
-            activityDao.deleteActivity(activity)
+            Log.d(TAG, "Deleting activity: id=${activity.id}, type=${activity.type}")
+            try {
+                activityDao.deleteActivity(activity)
+                Log.i(TAG, "Activity deleted successfully: id=${activity.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to delete activity: ${e.message}", e)
+                throw e
+            }
         }
     }
 
     suspend fun getTotalByTypeAndDateRange(type: String, startDate: Long, endDate: Long): Int =
         withContext(Dispatchers.IO) {
-            activityDao.getTotalByTypeAndDateRange(type, startDate, endDate) ?: 0
+            Log.d(TAG, "Querying total for type=$type, dateRange=[$startDate, $endDate]")
+            val total = activityDao.getTotalByTypeAndDateRange(type, startDate, endDate) ?: 0
+            Log.d(TAG, "Query result: total=$total for type=$type")
+            total
         }
 
     fun getExercises(limit: Int = 20, offset: Int = 0): Flow<Result<ExerciseInfoResponse>> = flow {
         emit(Result.Loading)
+        Log.d(TAG, "Getting exercises: limit=$limit, offset=$offset")
         try {
             var cache = ensureCatalogueCacheLoaded()
+            Log.d(TAG, "Cache loaded: ${cache.exercises.size} exercises available")
             if (cache.exercises.isEmpty()) {
+                Log.w(TAG, "Cache empty, forcing refresh")
                 cache = ensureCatalogueCacheLoaded(forceRefresh = true)
             }
 
@@ -98,9 +125,10 @@ class ActivityRepository(
                 previous = null,
                 results = results
             )
+            Log.i(TAG, "Returning ${results.size} exercises from cache (offset=$offset, limit=$limit)")
             emit(Result.Success(response))
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching exercises", e)
+            Log.e(TAG, "Error fetching exercises: ${e.message}", e)
             emit(Result.Error(e))
         }
     }.catch { throwable ->
@@ -182,7 +210,10 @@ class ActivityRepository(
     }
 
     fun calculateCaloriesBurned(activityType: String, durationMinutes: Int, weightKg: Float): Int {
-        if (durationMinutes <= 0 || weightKg <= 0f) return 0
+        if (durationMinutes <= 0 || weightKg <= 0f) {
+            Log.w(TAG, "Invalid calorie calculation input: duration=$durationMinutes, weight=$weightKg")
+            return 0
+        }
 
         val metValue = when (activityType.lowercase()) {
             "walking" -> 3.5
@@ -195,13 +226,20 @@ class ActivityRepository(
         }
 
         val durationHours = durationMinutes / 60.0
-        return (metValue * weightKg * durationHours).toInt()
+        val calories = (metValue * weightKg * durationHours).toInt()
+        Log.d(TAG, "Calorie calculation: type=$activityType, MET=$metValue, duration=${durationMinutes}min, weight=${weightKg}kg => $calories cal")
+        return calories
     }
 
     fun calculateStepGoalProgress(currentSteps: Int, goalSteps: Int): Float {
-        if (goalSteps <= 0) return 0f
+        if (goalSteps <= 0) {
+            Log.w(TAG, "Invalid step goal: goalSteps=$goalSteps")
+            return 0f
+        }
         val progress = currentSteps.toFloat() / goalSteps.toFloat()
-        return progress.coerceIn(0f, 1f)
+        val cappedProgress = progress.coerceIn(0f, 1f)
+        Log.d(TAG, "Step progress: $currentSteps/$goalSteps = ${(cappedProgress * 100).toInt()}%")
+        return cappedProgress
     }
 
     suspend fun getActivityById(id: Long): ActivityEntity? = withContext(Dispatchers.IO) {

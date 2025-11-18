@@ -1,6 +1,7 @@
 package com.example.smartfit.data.datastore
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -23,6 +24,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class UserPreferences(private val context: Context) {
 
     companion object {
+        private const val TAG = "UserPreferences"
         private const val DEMO_PROFILE_ID = "smartfit-demo"
         private const val DEMO_DISPLAY_NAME = "SmartFit Demo"
         private val DARK_THEME = booleanPreferencesKey("dark_theme")
@@ -78,75 +80,98 @@ class UserPreferences(private val context: Context) {
     }
 
     suspend fun setDarkTheme(enabled: Boolean) {
+        Log.d(TAG, "Setting dark theme preference: $enabled")
         context.dataStore.edit { preferences ->
             preferences[DARK_THEME] = enabled
         }
+        Log.i(TAG, "Dark theme preference saved: $enabled")
     }
 
     suspend fun setDailyStepGoal(goal: Int) {
+        Log.d(TAG, "Setting daily step goal: $goal steps")
         context.dataStore.edit { preferences ->
             preferences[DAILY_STEP_GOAL] = goal
         }
+        Log.i(TAG, "Daily step goal saved: $goal steps")
     }
 
     suspend fun setDailyCalorieGoal(goal: Int) {
+        Log.d(TAG, "Setting daily calorie goal: $goal calories")
         context.dataStore.edit { preferences ->
             preferences[DAILY_CALORIE_GOAL] = goal
         }
+        Log.i(TAG, "Daily calorie goal saved: $goal calories")
     }
 
     suspend fun setUserName(name: String) {
+        Log.d(TAG, "Setting user name: $name")
         context.dataStore.edit { preferences ->
             preferences[USER_NAME] = name
         }
+        Log.i(TAG, "User name saved: $name")
     }
 
     suspend fun setUserWeight(weight: Float) {
+        Log.d(TAG, "Setting user weight: ${weight}kg")
         context.dataStore.edit { preferences ->
             preferences[USER_WEIGHT] = weight
         }
+        Log.i(TAG, "User weight saved: ${weight}kg")
     }
 
     suspend fun setUserHeight(height: Float) {
+        Log.d(TAG, "Setting user height: ${height}cm")
         context.dataStore.edit { preferences ->
             preferences[USER_HEIGHT] = height
         }
+        Log.i(TAG, "User height saved: ${height}cm")
     }
 
     suspend fun setFirstLaunchComplete() {
+        Log.d(TAG, "Marking first launch as complete")
         context.dataStore.edit { preferences ->
             preferences[IS_FIRST_LAUNCH] = false
         }
+        Log.i(TAG, "First launch flag cleared")
     }
 
     suspend fun setLoggedIn(isLoggedIn: Boolean) {
+        Log.d(TAG, "Setting logged in status: $isLoggedIn")
         context.dataStore.edit { preferences ->
             preferences[IS_LOGGED_IN] = isLoggedIn
         }
+        Log.i(TAG, "Logged in status saved: $isLoggedIn")
     }
 
     suspend fun setActiveProfileId(profileId: String?) {
+        Log.d(TAG, "Setting active profile ID: $profileId")
         context.dataStore.edit { preferences ->
             if (profileId.isNullOrBlank()) {
                 preferences.remove(ACTIVE_PROFILE_ID)
+                Log.i(TAG, "Active profile ID cleared")
             } else {
                 preferences[ACTIVE_PROFILE_ID] = profileId
+                Log.i(TAG, "Active profile ID saved: $profileId")
             }
         }
     }
 
     suspend fun upsertProfile(profile: StoredProfile) {
+        Log.d(TAG, "Upserting profile: ${profile.id} - ${profile.displayName}")
         context.dataStore.edit { preferences ->
             val current = preferences[SAVED_PROFILES]?.let(::deserializeProfiles)?.toMutableList()
                 ?: mutableListOf()
             val existingIndex = current.indexOfFirst { it.id == profile.id }
             if (existingIndex >= 0) {
                 current[existingIndex] = profile
+                Log.i(TAG, "Profile updated: ${profile.id}")
             } else {
                 current += profile
+                Log.i(TAG, "Profile created: ${profile.id}")
             }
             preferences[SAVED_PROFILES] = serializeProfiles(current)
         }
+        Log.i(TAG, "Profile upserted successfully: ${profile.displayName}")
     }
 
     suspend fun removeProfile(profileId: String) {

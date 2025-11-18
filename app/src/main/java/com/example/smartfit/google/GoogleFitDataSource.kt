@@ -26,29 +26,58 @@ import kotlinx.coroutines.withContext
 class GoogleFitDataSource(private val context: Context) {
 
     suspend fun fetchExercises(limit: Int = 20, offset: Int = 0): ExerciseInfoResponse = withContext(Dispatchers.IO) {
-        val workouts = loadWorkouts()
-        if (workouts.isEmpty()) {
-            return@withContext fallbackCatalog(limit, offset)
-        }
+        android.util.Log.d("GoogleFitDataSource", "fetchExercises called with limit=$limit, offset=$offset")
+        try {
+            val workouts = loadWorkouts()
+            android.util.Log.i("GoogleFitDataSource", "Loaded ${workouts.size} workouts from Google Fit")
+            
+            if (workouts.isEmpty()) {
+                android.util.Log.i("GoogleFitDataSource", "No workouts found, returning fallback catalog")
+                return@withContext fallbackCatalog(limit, offset)
+            }
 
-        val sliced = workouts.drop(offset).take(limit)
-        ExerciseInfoResponse(
-            count = workouts.size,
-            next = null,
-            previous = null,
-            results = sliced.map { it.toExerciseInfo() }
-        )
+            val sliced = workouts.drop(offset).take(limit)
+            android.util.Log.i("GoogleFitDataSource", "Returning ${sliced.size} exercises after pagination")
+            ExerciseInfoResponse(
+                count = workouts.size,
+                next = null,
+                previous = null,
+                results = sliced.map { it.toExerciseInfo() }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleFitDataSource", "Error fetching exercises", e)
+            throw e
+        }
     }
 
     suspend fun fetchWorkouts(limit: Int = 20, offset: Int = 0): List<FitWorkout> = withContext(Dispatchers.IO) {
-        val workouts = loadWorkouts()
-        workouts.drop(offset).take(limit)
+        android.util.Log.d("GoogleFitDataSource", "fetchWorkouts called with limit=$limit, offset=$offset")
+        try {
+            val workouts = loadWorkouts()
+            val result = workouts.drop(offset).take(limit)
+            android.util.Log.i("GoogleFitDataSource", "Returning ${result.size} workouts (${workouts.size} total loaded)")
+            result
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleFitDataSource", "Error fetching workouts", e)
+            throw e
+        }
     }
 
     private suspend fun loadWorkouts(): List<FitWorkout> {
-        val account = GoogleSignIn.getLastSignedInAccount(context) ?: return fallbackWorkouts()
+        android.util.Log.d("GoogleFitDataSource", "loadWorkouts: Loading workouts from Google Fit")
+        val account = GoogleSignIn.getLastSignedInAccount(context)
+        if (account == null) {
+            android.util.Log.i("GoogleFitDataSource", "No signed-in account, using fallback workouts")
+            return fallbackWorkouts()
+        }
+        
         val response = readRecentSessions(account)
-        if (response.sessions.isEmpty()) return fallbackWorkouts()
+        android.util.Log.i("GoogleFitDataSource", "Retrieved ${response.sessions.size} sessions from Google Fit")
+        
+        if (response.sessions.isEmpty()) {
+            android.util.Log.i("GoogleFitDataSource", "No sessions found, using fallback workouts")
+            return fallbackWorkouts()
+        }
 
         val workouts = response.sessions.map { session ->
             val activityName = humanReadableActivity(session.activity)
@@ -89,26 +118,36 @@ class GoogleFitDataSource(private val context: Context) {
     private suspend fun readRecentSessions(account: GoogleSignInAccount): SessionReadResponse {
         val endMillis = System.currentTimeMillis()
         val startMillis = endMillis - TimeUnit.DAYS.toMillis(30)
+        android.util.Log.d("GoogleFitDataSource", "readRecentSessions: Querying Google Fit from ${java.text.SimpleDateFormat.getDateTimeInstance().format(startMillis)} to ${java.text.SimpleDateFormat.getDateTimeInstance().format(endMillis)}")
 
-        val request = com.google.android.gms.fitness.request.SessionReadRequest.Builder()
-            .setTimeInterval(startMillis, endMillis, TimeUnit.MILLISECONDS)
-            .readSessionsFromAllApps()
-            .enableServerQueries()
-            .read(DataType.TYPE_ACTIVITY_SEGMENT)
-            .read(DataType.TYPE_STEP_COUNT_DELTA)
-            .read(DataType.TYPE_DISTANCE_DELTA)
-            .read(DataType.TYPE_CALORIES_EXPENDED)
-            .read(DataType.TYPE_HEART_RATE_BPM)
-            .read(DataType.TYPE_MOVE_MINUTES)
-            .read(DataType.TYPE_SPEED)
-            .build()
+        try {
+            val request = com.google.android.gms.fitness.request.SessionReadRequest.Builder()
+                .setTimeInterval(startMillis, endMillis, TimeUnit.MILLISECONDS)
+                .readSessionsFromAllApps()
+                .enableServerQueries()
+                .read(DataType.TYPE_ACTIVITY_SEGMENT)
+                .read(DataType.TYPE_STEP_COUNT_DELTA)
+                .read(DataType.TYPE_DISTANCE_DELTA)
+                .read(DataType.TYPE_CALORIES_EXPENDED)
+                .read(DataType.TYPE_HEART_RATE_BPM)
+                .read(DataType.TYPE_MOVE_MINUTES)
+                .read(DataType.TYPE_SPEED)
+                .build()
 
-        return Fitness.getSessionsClient(context, account).readSession(request).await()
+            val response = Fitness.getSessionsClient(context, account).readSession(request).await()
+            android.util.Log.i("GoogleFitDataSource", "Successfully read ${response.sessions.size} sessions from Google Fit API")
+            return response
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleFitDataSource", "Error reading sessions from Google Fit API", e)
+            throw e
+        }
     }
 
     private fun aggregateMetrics(session: Session, response: SessionReadResponse): SessionMetrics {
+        android.util.Log.d("GoogleFitDataSource", "aggregateMetrics: Processing session '${session.name}' (${session.activity})")
         val durationMillis = session.getEndTime(TimeUnit.MILLISECONDS) - session.getStartTime(TimeUnit.MILLISECONDS)
         val dataSets = response.getDataSet(session)
+        android.util.Log.d("GoogleFitDataSource", "Found ${dataSets.size} data sets for session")
 
         var calories = 0.0
         var steps = 0

@@ -224,6 +224,7 @@ class ActivityViewModel(
     }
 
     fun getTodayStats(): Flow<Map<String, Int>> {
+        Log.d(TAG, "Getting today's statistics")
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -232,13 +233,18 @@ class ActivityViewModel(
         }
         val startOfDay = calendar.timeInMillis
         val endOfDay = startOfDay + TimeUnit.DAYS.toMillis(1) - 1
+        Log.d(TAG, "Today's date range: [$startOfDay, $endOfDay]")
 
         return repository.getActivitiesByDateRange(startOfDay, endOfDay)
-            .map { aggregateStats(it) }
+            .map { activities ->
+                Log.d(TAG, "Processing ${activities.size} activities for today")
+                aggregateStats(activities)
+            }
             .flowOn(Dispatchers.IO)
     }
 
     fun getWeeklyStats(): Flow<Map<String, Int>> {
+        Log.d(TAG, "Getting weekly statistics")
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 23)
             set(Calendar.MINUTE, 59)
@@ -252,9 +258,13 @@ class ActivityViewModel(
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
         val startOfRange = calendar.timeInMillis
+        Log.d(TAG, "Weekly date range: [$startOfRange, $endOfRange]")
 
         return repository.getActivitiesByDateRange(startOfRange, endOfRange)
-            .map { aggregateStats(it) }
+            .map { activities ->
+                Log.d(TAG, "Processing ${activities.size} activities for this week")
+                aggregateStats(activities)
+            }
             .flowOn(Dispatchers.IO)
     }
 
@@ -265,30 +275,76 @@ class ActivityViewModel(
         repository.calculateStepGoalProgress(currentSteps, goalSteps)
 
     fun setDarkTheme(enabled: Boolean) {
-        viewModelScope.launch { userPreferences.setDarkTheme(enabled) }
+        Log.d(TAG, "Setting dark theme: $enabled")
+        viewModelScope.launch { 
+            try {
+                userPreferences.setDarkTheme(enabled)
+                Log.i(TAG, "Dark theme set successfully: $enabled")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set dark theme: ${e.message}", e)
+            }
+        }
     }
 
     fun setDailyStepGoal(goal: Int) {
-        viewModelScope.launch { userPreferences.setDailyStepGoal(goal) }
+        Log.d(TAG, "Setting daily step goal: $goal")
+        viewModelScope.launch { 
+            try {
+                userPreferences.setDailyStepGoal(goal)
+                Log.i(TAG, "Daily step goal set successfully: $goal")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set step goal: ${e.message}", e)
+            }
+        }
     }
 
     fun setDailyCalorieGoal(goal: Int) {
-        viewModelScope.launch { userPreferences.setDailyCalorieGoal(goal) }
+        Log.d(TAG, "Setting daily calorie goal: $goal")
+        viewModelScope.launch { 
+            try {
+                userPreferences.setDailyCalorieGoal(goal)
+                Log.i(TAG, "Daily calorie goal set successfully: $goal")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set calorie goal: ${e.message}", e)
+            }
+        }
     }
 
     fun setUserName(name: String) {
+        Log.d(TAG, "Setting user name: $name")
         viewModelScope.launch {
-            userPreferences.setUserName(name)
-            userPreferences.updateProfileName(userPreferencesState.value.activeProfileId, name)
+            try {
+                userPreferences.setUserName(name)
+                userPreferences.updateProfileName(userPreferencesState.value.activeProfileId, name)
+                Log.i(TAG, "User name set successfully: $name")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set user name: ${e.message}", e)
+            }
         }
     }
 
     fun setUserWeight(weight: Float) {
-        viewModelScope.launch { userPreferences.setUserWeight(weight) }
+        Log.d(TAG, "Setting user weight: ${weight}kg")
+        viewModelScope.launch { 
+            try {
+                userPreferences.setUserWeight(weight)
+                Log.i(TAG, "User weight set successfully: ${weight}kg")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set user weight: ${e.message}", e)
+            }
+        }
     }
 
     fun setUserHeight(height: Float) {
-        viewModelScope.launch { userPreferences.setUserHeight(height) }
+        Log.d(TAG, "Setting user height: ${height}cm")
+        viewModelScope.launch { 
+            try {
+                userPreferences.setUserHeight(height)
+                Log.i(TAG, "User height set successfully: ${height}cm")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set user height: ${e.message}", e)
+            }
+        }
     }
 
     fun setFirstLaunchComplete() {
@@ -375,14 +431,17 @@ class ActivityViewModel(
     }
 
     private fun aggregateStats(activities: List<ActivityEntity>): Map<String, Int> {
+        Log.d(TAG, "Aggregating statistics for ${activities.size} activities")
         val totals = activities.groupBy { it.type }.mapValues { entry ->
             entry.value.sumOf { activity -> activity.value }
         }
 
-        return mapOf(
+        val result = mapOf(
             "Steps" to (totals["Steps"] ?: 0),
             "Calories" to (totals["Calories"] ?: 0),
             "Workout" to (totals["Workout"] ?: 0)
         )
+        Log.d(TAG, "Aggregated stats: Steps=${result["Steps"]}, Calories=${result["Calories"]}, Workouts=${result["Workout"]}")
+        return result
     }
 }
