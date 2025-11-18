@@ -1,40 +1,42 @@
 package com.example.smartfit.data.remote
 
-import retrofit2.http.GET
-import retrofit2.http.Query
-
-data class WorkoutTip(
-    val id: Int,
-    val title: String,
-    val description: String,
-    val category: String,
-    val imageUrl: String
+data class ExerciseInfoResponse(
+    val count: Int? = 0,
+    val next: String? = null,
+    val previous: String? = null,
+    val results: List<ExerciseInfo> = emptyList()
 )
 
-data class NutritionTip(
-    val id: Int,
-    val name: String,
-    val calories: Int,
-    val protein: Int,
-    val carbs: Int,
-    val fat: Int,
-    val description: String
+data class ExerciseInfo(
+    val id: Int? = null,
+    val name: String? = null,
+    val description: String? = null,
+    val category: ExerciseCategory? = null,
+    val muscles: List<Muscle> = emptyList(),
+    val muscles_secondary: List<Muscle> = emptyList(),
+    val equipment: List<Equipment> = emptyList(),
+    val images: List<ExerciseImage> = emptyList()
 )
 
-// Response wrapper for JSONPlaceholder API
-data class Post(
-    val userId: Int,
-    val id: Int,
-    val title: String,
-    val body: String
+data class ExerciseCategory(
+    val id: Int? = null,
+    val name: String? = null
 )
 
-interface ApiService {
-    // Using JSONPlaceholder as a demo API
-    @GET("posts")
-    suspend fun getTips(@Query("_limit") limit: Int = 10): List<Post>
+data class Muscle(
+    val id: Int? = null,
+    val name: String? = null,
+    val name_en: String? = null
+)
 
-    @GET("posts")
-    suspend fun getTipById(@Query("id") id: Int): List<Post>
-}
+data class Equipment(
+    val id: Int? = null,
+    val name: String? = null
+)
+
+data class ExerciseImage(
+    val id: Int? = null,
+    val image: String? = null,
+    val is_main: Boolean? = null
+)
 

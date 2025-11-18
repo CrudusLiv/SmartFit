@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartFit Test Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px 40px;
+            background: #f8f9fa;
+        }
+        
+        .summary-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .summary-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+        
+        .summary-card .number {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .summary-card .label {
+            color: #666;
+            font-size: 1em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .summary-card.success .number {
+            color: #28a745;
+        }
+        
+        .summary-card.info .number {
+            color: #667eea;
+        }
+        
+        .summary-card.time .number {
+            color: #17a2b8;
+            font-size: 2em;
+        }
+        
+        .test-suites {
+            padding: 40px;
+        }
+        
+        .test-suite {
+            margin-bottom: 30px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .test-suite-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .test-suite-header h2 {
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .test-suite-body {
+            padding: 20px;
+            background: white;
+        }
+        
+        .test-case {
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s;
+        }
+        
+        .test-case:hover {
+            background: #e9ecef;
+        }
+        
+        .test-case .test-name {
+            flex: 1;
+            font-family: 'Courier New', monospace;
+            color: #333;
+        }
+        
+        .test-case .test-time {
+            color: #666;
+            font-size: 0.9em;
+            margin-left: 20px;
+        }
+        
+        .status-icon {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+        
+        .pass {
+            color: #28a745;
+        }
+        
+        .footer {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .footer p {
+            margin: 5px 0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-item {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .stat-item .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            display: block;
+        }
+        
+        .stat-item .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 SmartFit Test Report</h1>
+            <p class="subtitle">Comprehensive Unit Test Results</p>
+        </div>
+        
+        <div class="summary">
+            <div class="summary-card success">
+                <div class="label">Total Tests</div>
+                <div class="number">65</div>
+            </div>
+            <div class="summary-card success">
+                <div class="label">Passed</div>
+                <div class="number">65</div>
+            </div>
+            <div class="summary-card info">
+                <div class="label">Pass Rate</div>
+                <div class="number">100%</div>
+            </div>
+            <div class="summary-card time">
+                <div class="label">Total Time</div>
+                <div class="number">0.073s</div>
+            </div>
+        </div>
+        
+        <div class="test-suites">
+            <div class="test-suite">
+                <div class="test-suite-header">
+                    <h2>
+                        <span class="status-icon pass">✅</span>
+                        ActivityRepositoryTest
+                    </h2>
+                    <span class="badge">33 tests | 0.041s</span>
+                </div>
+                <div class="test-suite-body">
+                    <p><strong>Tests core business logic:</strong> Calorie calculations, step progress tracking, and activity statistics</p>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-value">15</span>
+                            <span class="stat-label">Calorie Tests</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value">12</span>
+                            <span class="stat-label">Progress Tests</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value">6</span>
+                            <span class="stat-label">Edge Cases</span>
+                        </div>
+                    </div>
+                    <br>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; padding: 10px; background: #e9ecef; border-radius: 5px;">View All Test Cases (33)</summary>
+                        <div style="margin-top: 10px;">
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_walking30min70kg_returns122</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_running60min80kg_returns640</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_workout45min75kg_returns281</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_cycling90min65kg_returns585</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_swimming40min70kg_returns326</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_yoga60min60kg_returns150</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_training20min85kg_returns141</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_unknownActivity60min70kg_usesDefaultMET</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_zeroWeight_returnsZero</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_zeroDuration_returnsZero</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_negativeWeight_returnsZero</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_negativeDuration_returnsZero</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_lightWeight40kg_worksCorrectly</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_heavyWeight120kg_worksCorrectly</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_caseInsensitive_worksCorrectly</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_0of10000_returnsZero</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_2500of10000_returns25Percent</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_5000of10000_returns50Percent</span>
+                                <span class="test-time">0.003s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_7500of10000_returns75Percent</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_9900of10000_returns99Percent</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_10000of10000_returns100Percent</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_15000of10000_cappedAt100Percent</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_20000of10000_cappedAt100</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_5000of0_returnsZero</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_negativeSteps_clampedToZero</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_negativeGoal_returnsZero</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_shortDuration5min_worksCorrectly</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_longDuration180min_worksCorrectly</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ calculateCalories_allActivityTypes_returnPositive</span>
+                                <span class="test-time">0.021s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_1of1_returns100Percent</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_smallGoal1000_worksCorrectly</span>
+                                <span class="test-time">0.000s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_largeGoal20000_worksCorrectly</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                            <div class="test-case">
+                                <span class="test-name">✓ stepProgress_boundaryValues_workCorrectly</span>
+                                <span class="test-time">0.001s</span>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+            
+            <div class="test-suite">
+                <div class="test-suite-header">
+                    <h2>
+                        <span class="status-icon pass">✅</span>
+                        ViewModelLogicTest
+                    </h2>
+                    <span class="badge">26 tests | 0.020s</span>
+                </div>
+                <div class="test-suite-body">
+                    <p><strong>Tests ViewModel business logic:</strong> Statistics aggregation, data validation, BMI calculations, and formatting</p>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-value">4</span>
+                            <span class="stat-label">Stats Tests</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value">6</span>
+                            <span class="stat-label">Validation Tests</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value">16</span>
+                            <span class="stat-label">Utility Tests</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="test-suite">
+                <div class="test-suite-header">
+                    <h2>
+                        <span class="status-icon pass">✅</span>
+                        ActivityEntityTest
+                    </h2>
+                    <span class="badge">5 tests | 0.012s</span>
+                </div>
+                <div class="test-suite-body">
+                    <p><strong>Tests data model:</strong> Entity creation, default values, copying, and equality comparisons</p>
+                </div>
+            </div>
+            
+            <div class="test-suite">
+                <div class="test-suite-header">
+                    <h2>
+                        <span class="status-icon pass">✅</span>
+                        ExampleUnitTest
+                    </h2>
+                    <span class="badge">1 test | 0.000s</span>
+                </div>
+                <div class="test-suite-body">
+                    <p><strong>Basic sanity test:</strong> Ensures test infrastructure is working correctly</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <h3>🎉 All Tests Passed Successfully!</h3>
+            <p>SmartFit application is ready for deployment</p>
+            <p style="margin-top: 20px; font-size: 0.9em; opacity: 0.8;">
+                Generated on: November 18, 2025 | Test Framework: JUnit 4 | Build Tool: Gradle 8.9
+            </p>
+        </div>
+    </div>
+</body>
+</html>

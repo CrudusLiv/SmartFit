@@ -23,7 +23,7 @@ class MainActivityTest {
         composeTestRule.waitForIdle()
 
         // Verify main screen elements are present
-        composeTestRule.onNodeWithText("SmartFit").assertExists()
+        composeTestRule.onNodeWithText("Dashboard").assertExists()
         composeTestRule.onNodeWithText("Today's Progress").assertExists()
     }
 
@@ -32,8 +32,8 @@ class MainActivityTest {
         // Wait for the app to load
         composeTestRule.waitForIdle()
 
-        // Click on profile icon
-        composeTestRule.onNodeWithContentDescription("Profile").performClick()
+        // Click on profile tab
+        composeTestRule.onNodeWithTag("nav_profile").performClick()
 
         // Verify we're on the profile screen
         composeTestRule.waitForIdle()
@@ -45,8 +45,8 @@ class MainActivityTest {
         // Wait for the app to load
         composeTestRule.waitForIdle()
 
-        // Click on View Log quick action
-        composeTestRule.onNodeWithText("View Log").performClick()
+        // Click on activity tab
+        composeTestRule.onNodeWithTag("nav_activity_log").performClick()
 
         // Verify we're on the activity log screen
         composeTestRule.waitForIdle()
@@ -73,20 +73,19 @@ class MainActivityTest {
 
         // Verify we're back on home screen
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithText("SmartFit").assertExists()
+        composeTestRule.onNodeWithText("Dashboard").assertExists()
     }
 
     @Test
-    fun darkTheme_toggle_works() {
-        // Test theme switching
+    fun appearanceSection_showsUnifiedThemeMessage() {
+        // The app now uses a single dark appearance
         composeTestRule.waitForIdle()
 
         // Navigate to profile
-        composeTestRule.onNodeWithContentDescription("Profile").performClick()
+        composeTestRule.onNodeWithTag("nav_profile").performClick()
         composeTestRule.waitForIdle()
 
-        // Find and toggle dark theme switch
-        composeTestRule.onNodeWithContentDescription("Dark theme toggle, currently disabled")
+        composeTestRule.onNodeWithText("SmartFit now displays in a unified night mode", substring = true)
             .assertExists()
     }
 
@@ -97,8 +96,7 @@ class MainActivityTest {
 
         // Verify stats cards exist
         composeTestRule.onNodeWithText("Steps").assertExists()
-        composeTestRule.onNodeWithText("Calories Burned").assertExists()
-        composeTestRule.onNodeWithText("Workout Time").assertExists()
+        composeTestRule.onNodeWithText("Calories").assertExists()
     }
 
     @Test
@@ -106,8 +104,8 @@ class MainActivityTest {
         // Test filtering in activity log
         composeTestRule.waitForIdle()
 
-        // Navigate to activity log
-        composeTestRule.onNodeWithText("View Log").performClick()
+        // Navigate to activity log via bottom navigation
+        composeTestRule.onNodeWithTag("nav_activity_log").performClick()
         composeTestRule.waitForIdle()
 
         // Click filter chip

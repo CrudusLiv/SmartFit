@@ -12,20 +12,20 @@ class ActivityEntityTest {
 
     @Test
     fun activityEntity_creation_isCorrect() {
-        // Test creating an ActivityEntity
+        // Test creating an ActivityEntity with actual structure
         val activity = ActivityEntity(
             id = 1,
             type = "Steps",
             value = 10000,
-            unit = "steps",
             date = System.currentTimeMillis(),
-            notes = "Morning walk"
+            notes = "Morning walk",
+            duration = 30
         )
 
         assertEquals(1L, activity.id)
         assertEquals("Steps", activity.type)
         assertEquals(10000, activity.value)
-        assertEquals("steps", activity.unit)
+        assertEquals(30, activity.duration)
         assertEquals("Morning walk", activity.notes)
     }
 
@@ -35,13 +35,12 @@ class ActivityEntityTest {
         val activity = ActivityEntity(
             type = "Workout",
             value = 30,
-            unit = "minutes",
             date = System.currentTimeMillis()
         )
 
         assertEquals(0L, activity.id)
         assertEquals("", activity.notes)
-        assertTrue(activity.createdAt > 0)
+        assertEquals(0, activity.duration)
     }
 
     @Test
@@ -51,7 +50,6 @@ class ActivityEntityTest {
             id = 1,
             type = "Steps",
             value = 5000,
-            unit = "steps",
             date = System.currentTimeMillis()
         )
 
@@ -71,19 +69,32 @@ class ActivityEntityTest {
             id = 1,
             type = "Steps",
             value = 10000,
-            unit = "steps",
-            date = time
+            date = time,
+            duration = 30
         )
 
         val activity2 = ActivityEntity(
             id = 1,
             type = "Steps",
             value = 10000,
-            unit = "steps",
-            date = time
+            date = time,
+            duration = 30
         )
 
         assertEquals(activity1, activity2)
+    }
+
+    @Test
+    fun activityEntity_duration_isStored() {
+        // Test duration field
+        val activity = ActivityEntity(
+            type = "Workout",
+            value = 500,
+            date = System.currentTimeMillis(),
+            duration = 45
+        )
+
+        assertEquals(45, activity.duration)
     }
 }
 

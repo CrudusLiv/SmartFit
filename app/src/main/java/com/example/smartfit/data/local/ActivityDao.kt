@@ -11,11 +11,14 @@ interface ActivityDao {
     @Query("SELECT * FROM activities WHERE id = :id")
     suspend fun getActivityById(id: Long): ActivityEntity?
 
-    @Query("SELECT * FROM activities WHERE date >= :startDate AND date <= :endDate ORDER BY date DESC")
+    @Query("SELECT * FROM activities WHERE date BETWEEN :startDate AND :endDate ORDER BY date DESC")
     fun getActivitiesByDateRange(startDate: Long, endDate: Long): Flow<List<ActivityEntity>>
 
     @Query("SELECT * FROM activities WHERE type = :type ORDER BY date DESC")
     fun getActivitiesByType(type: String): Flow<List<ActivityEntity>>
+
+    @Query("SELECT SUM(value) FROM activities WHERE type = :type AND date BETWEEN :startDate AND :endDate")
+    suspend fun getTotalByTypeAndDateRange(type: String, startDate: Long, endDate: Long): Int?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertActivity(activity: ActivityEntity): Long
@@ -28,8 +31,5 @@ interface ActivityDao {
 
     @Query("DELETE FROM activities")
     suspend fun deleteAllActivities()
-
-    @Query("SELECT SUM(value) FROM activities WHERE type = :type AND date >= :startDate AND date <= :endDate")
-    suspend fun getTotalByTypeAndDateRange(type: String, startDate: Long, endDate: Long): Int?
 }
 

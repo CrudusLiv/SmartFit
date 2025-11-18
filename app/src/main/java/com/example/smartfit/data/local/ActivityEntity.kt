@@ -7,11 +7,10 @@ import androidx.room.PrimaryKey
 data class ActivityEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val type: String, // "Steps", "Workout", "Calories"
-    val value: Int,
-    val unit: String, // "steps", "minutes", "kcal"
+    val type: String, // "Steps", "Workout", "Calories", etc.
+    val value: Int, // Number value (steps count, calories, duration in minutes)
     val date: Long, // Timestamp
     val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val duration: Int = 0 // Duration in minutes for workouts
 )
 

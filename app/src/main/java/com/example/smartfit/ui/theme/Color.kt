@@ -2,36 +2,46 @@ package com.example.smartfit.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Light Theme Colors
-val Primary = Color(0xFF6200EE)
-val PrimaryVariant = Color(0xFF3700B3)
-val Secondary = Color(0xFF03DAC6)
-val SecondaryVariant = Color(0xFF018786)
+// Core palette inspired by the dashboard stats
+val SmartFitPrimary = Color(0xFF22C55E)
+val SmartFitOnPrimary = Color(0xFF02240F)
+val SmartFitPrimaryContainer = Color(0xFF134E32)
+val SmartFitOnPrimaryContainer = Color(0xFFA7F3C4)
 
-// Fitness-themed colors
-val FitnessGreen = Color(0xFF4CAF50)
-val FitnessBlue = Color(0xFF2196F3)
-val FitnessOrange = Color(0xFFFF9800)
-val FitnessRed = Color(0xFFF44336)
-val FitnessPurple = Color(0xFF9C27B0)
+val SmartFitSecondary = Color(0xFFF97316)
+val SmartFitOnSecondary = Color(0xFF2A0F00)
+val SmartFitSecondaryContainer = Color(0xFF7C3410)
+val SmartFitOnSecondaryContainer = Color(0xFFFFE4D0)
 
-// Dark Theme Colors
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val SmartFitTertiary = Color(0xFF16A34A)
+val SmartFitOnTertiary = Color(0xFF002110)
+val SmartFitTertiaryContainer = Color(0xFF0B4224)
+val SmartFitOnTertiaryContainer = Color(0xFFA3F2C3)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Surfaces & backgrounds
+val SmartFitBackground = Color(0xFF0B1220)
+val SmartFitSurface = Color(0xFF111C2B)
+val SmartFitSurfaceVariant = Color(0xFF1E2A38)
+val SmartFitOnBackground = Color(0xFFE2E8F0)
+val SmartFitOnSurface = Color(0xFFE2E8F0)
+val SmartFitOnSurfaceVariant = Color(0xFF9BA8C1)
+val SmartFitOutline = Color(0xFF2F3F55)
+val SmartFitOutlineVariant = Color(0xFF1A2636)
 
-// Additional colors
-val BackgroundLight = Color(0xFFFFFBFE)
-val BackgroundDark = Color(0xFF1C1B1F)
-val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceDark = Color(0xFF2B2930)
+// Status & supporting colors
+val SmartFitError = Color(0xFFEF4444)
+val SmartFitOnError = Color.Black
+val SmartFitErrorContainer = Color(0xFF7F1D1D)
+val SmartFitOnErrorContainer = Color(0xFFFFE5E5)
 
-// Chart colors
-val ChartColor1 = Color(0xFF4CAF50)
-val ChartColor2 = Color(0xFF2196F3)
-val ChartColor3 = Color(0xFFFF9800)
-val ChartColor4 = Color(0xFFF44336)
+val SmartFitScrim = Color(0xFF000000)
+val SmartFitInverseSurface = Color(0xFFE2E8F0)
+val SmartFitInverseOnSurface = Color(0xFF102132)
+val SmartFitInversePrimary = Color(0xFF166534)
+
+// Convenience aliases used around the UI
+val FitnessGreen = SmartFitPrimary
+val FitnessOrange = SmartFitSecondary
+val FitnessBlue = Color(0xFF0EA5E9)
+val FitnessRed = SmartFitError
+val FitnessPurple = Color(0xFF7C3AED)

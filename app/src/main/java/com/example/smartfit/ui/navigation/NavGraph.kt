@@ -1,8 +1,7 @@
 package com.example.smartfit.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,25 +11,54 @@ import com.example.smartfit.ui.screens.*
 import com.example.smartfit.viewmodel.ActivityViewModel
 
 sealed class Screen(val route: String) {
+    object Splash : Screen("splash")
+    object Login : Screen("login")
     object Home : Screen("home")
     object ActivityLog : Screen("activity_log")
     object AddEditActivity : Screen("add_edit_activity/{activityId}") {
         fun createRoute(activityId: Long = -1L) = "add_edit_activity/$activityId"
     }
     object Profile : Screen("profile")
+    object Exercises : Screen("exercises")
 }
 
 @Composable
 fun NavGraph(
     navController: NavHostController,
-    viewModel: ActivityViewModel
+    viewModel: ActivityViewModel,
+    onRequestGoogleSignIn: () -> Unit,
+    onRequestGoogleSignOut: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val userPreferences by viewModel.userPreferencesState.collectAsState()
-
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = Screen.Splash.route,
+        modifier = modifier
     ) {
+        composable(Screen.Splash.route) {
+            SplashScreen(
+                viewModel = viewModel,
+                onNavigationResolved = { isLoggedIn ->
+                    val targetRoute = if (isLoggedIn) Screen.Home.route else Screen.Login.route
+                    navController.navigate(targetRoute) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Login.route) {
+            LoginScreen(
+                viewModel = viewModel,
+                onLoginSuccess = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onGoogleSignIn = onRequestGoogleSignIn
+            )
+        }
+
         composable(Screen.Home.route) {
             HomeScreen(
                 viewModel = viewModel,
@@ -47,10 +75,14 @@ fun NavGraph(
         }
 
         composable(Screen.ActivityLog.route) {
+            val previousRoute = navController.previousBackStackEntry?.destination?.route
+            val showBack = previousRoute != null && previousRoute != Screen.Splash.route && previousRoute != Screen.Login.route
             ActivityLogScreen(
                 viewModel = viewModel,
-                onNavigateBack = {
-                    navController.popBackStack()
+                onNavigateBack = if (showBack) {
+                    { navController.popBackStack() }
+                } else {
+                    null
                 },
                 onNavigateToEdit = { activityId ->
                     navController.navigate(Screen.AddEditActivity.createRoute(activityId))
@@ -79,10 +111,34 @@ fun NavGraph(
         }
 
         composable(Screen.Profile.route) {
+            val previousRoute = navController.previousBackStackEntry?.destination?.route
+            val showBack = previousRoute != null && previousRoute != Screen.Splash.route && previousRoute != Screen.Login.route
             ProfileScreen(
                 viewModel = viewModel,
-                onNavigateBack = {
-                    navController.popBackStack()
+                onNavigateBack = if (showBack) {
+                    { navController.popBackStack() }
+                } else {
+                    null
+                },
+                onLogout = {
+                    viewModel.logout()
+                    onRequestGoogleSignOut()
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Exercises.route) {
+            val previousRoute = navController.previousBackStackEntry?.destination?.route
+            val showBack = previousRoute != null && previousRoute != Screen.Splash.route && previousRoute != Screen.Login.route
+            ExercisesScreen(
+                viewModel = viewModel,
+                onNavigateBack = if (showBack) {
+                    { navController.popBackStack() }
+                } else {
+                    null
                 }
             )
         }

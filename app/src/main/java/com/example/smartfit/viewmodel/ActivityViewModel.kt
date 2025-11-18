@@ -3,22 +3,42 @@ package com.example.smartfit.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.smartfit.data.datastore.StoredProfile
 import com.example.smartfit.data.datastore.UserPreferences
 import com.example.smartfit.data.local.ActivityEntity
-import com.example.smartfit.data.remote.Post
+import com.example.smartfit.data.model.WorkoutSuggestion
+import com.example.smartfit.data.remote.ExerciseInfo
 import com.example.smartfit.data.repository.ActivityRepository
 import com.example.smartfit.data.repository.Result
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import java.util.concurrent.TimeUnit
 
 data class ActivityUiState(
     val activities: List<ActivityEntity> = emptyList(),
+    val activitiesLoading: Boolean = false,
+    val activitiesError: String? = null,
+    val workoutSuggestions: List<WorkoutSuggestion> = emptyList(),
+    val suggestionsLoading: Boolean = false,
+    val suggestionsError: String? = null,
+    val exercises: List<ExerciseInfo> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val tips: List<Post> = emptyList(),
-    val tipsLoading: Boolean = false,
-    val tipsError: String? = null
+    val totalCount: Int = 0,
+    val authLoading: Boolean = false,
+    val authError: String? = null
 )
 
 data class UserPreferencesState(
@@ -28,7 +48,10 @@ data class UserPreferencesState(
     val userName: String = "",
     val userWeight: Float = 70f,
     val userHeight: Float = 170f,
-    val isFirstLaunch: Boolean = true
+    val isFirstLaunch: Boolean = true,
+    val isLoggedIn: Boolean = false,
+    val activeProfileId: String? = null,
+    val savedProfiles: List<StoredProfile> = emptyList()
 )
 
 class ActivityViewModel(
@@ -50,8 +73,11 @@ class ActivityViewModel(
         userPreferences.userName,
         userPreferences.userWeight,
         userPreferences.userHeight,
-        userPreferences.isFirstLaunch
-    ) { values: Array<*> ->
+        userPreferences.isFirstLaunch,
+        userPreferences.isLoggedIn,
+        userPreferences.activeProfileId,
+        userPreferences.savedProfiles
+    ) { values ->
         UserPreferencesState(
             darkTheme = values[0] as Boolean,
             dailyStepGoal = values[1] as Int,
@@ -59,215 +85,363 @@ class ActivityViewModel(
             userName = values[3] as String,
             userWeight = values[4] as Float,
             userHeight = values[5] as Float,
-            isFirstLaunch = values[6] as Boolean
+            isFirstLaunch = values[6] as Boolean,
+            isLoggedIn = values[7] as Boolean,
+            activeProfileId = values[8] as String?,
+            savedProfiles = values[9] as List<StoredProfile>
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.WhileSubscribed(5_000),
         initialValue = UserPreferencesState()
     )
 
     init {
-        Log.d(TAG, "ActivityViewModel initialized")
-        loadActivities()
-        loadTips()
+        observeActivities()
     }
 
-    private fun loadActivities() {
-        Log.d(TAG, "Loading activities")
+    private fun observeActivities() {
         viewModelScope.launch {
+            _uiState.update { it.copy(activitiesLoading = true, activitiesError = null) }
             repository.getAllActivities()
-                .catch { e ->
-                    Log.e(TAG, "Error loading activities", e)
-                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                .catch { throwable ->
+                    Log.e(TAG, "Error loading activities", throwable)
+                    _uiState.update {
+                        it.copy(
+                            activities = emptyList(),
+                            activitiesLoading = false,
+                            activitiesError = throwable.message
+                        )
+                    }
                 }
                 .collect { activities ->
-                    Log.d(TAG, "Loaded ${activities.size} activities")
-                    _uiState.update { it.copy(activities = activities, isLoading = false) }
-                }
-        }
-    }
-
-    fun loadTips() {
-        Log.d(TAG, "Loading tips from network")
-        viewModelScope.launch {
-            repository.getTipsFromNetwork()
-                .collect { result ->
-                    when (result) {
-                        is Result.Loading -> {
-                            Log.d(TAG, "Tips loading...")
-                            _uiState.update { it.copy(tipsLoading = true, tipsError = null) }
-                        }
-                        is Result.Success -> {
-                            Log.d(TAG, "Tips loaded successfully: ${result.data.size} tips")
-                            _uiState.update {
-                                it.copy(
-                                    tips = result.data,
-                                    tipsLoading = false,
-                                    tipsError = null
-                                )
-                            }
-                        }
-                        is Result.Error -> {
-                            Log.e(TAG, "Error loading tips", result.exception)
-                            _uiState.update {
-                                it.copy(
-                                    tipsLoading = false,
-                                    tipsError = result.exception.message
-                                )
-                            }
-                        }
+                    _uiState.update {
+                        it.copy(
+                            activities = activities,
+                            activitiesLoading = false,
+                            activitiesError = null
+                        )
                     }
                 }
         }
     }
 
+    fun loadExercises(limit: Int = 20, offset: Int = 0) {
+        viewModelScope.launch {
+            repository.getExercises(limit, offset).collect { result ->
+                when (result) {
+                    is Result.Loading -> _uiState.update { it.copy(isLoading = true, error = null) }
+                    is Result.Success -> _uiState.update {
+                        it.copy(
+                            exercises = result.data.results,
+                            totalCount = result.data.count ?: 0,
+                            isLoading = false,
+                            error = null
+                        )
+                    }
+                    is Result.Error -> _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = result.exception.message
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun loadWorkoutSuggestions(limit: Int = 8, offset: Int = 0, forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            if (forceRefresh) {
+                try {
+                    repository.refreshCatalogueCache()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Unable to refresh catalogue cache", e)
+                }
+            }
+            repository.getWorkoutSuggestions(limit, offset).collect { result ->
+                when (result) {
+                    is Result.Loading -> _uiState.update {
+                        it.copy(suggestionsLoading = true, suggestionsError = null)
+                    }
+
+                    is Result.Success -> _uiState.update {
+                        it.copy(
+                            workoutSuggestions = result.data,
+                            suggestionsLoading = false,
+                            suggestionsError = null)
+                    }
+
+                    is Result.Error -> _uiState.update {
+                        it.copy(
+                            suggestionsLoading = false,
+                            suggestionsError = result.exception.message
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun testWgerConnection(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.testWgerApiConnection()
+            onResult(result)
+        }
+    }
+
     fun addActivity(activity: ActivityEntity) {
-        Log.d(TAG, "Adding activity: $activity")
         viewModelScope.launch {
             try {
                 repository.insertActivity(activity)
-                Log.d(TAG, "Activity added successfully")
             } catch (e: Exception) {
                 Log.e(TAG, "Error adding activity", e)
-                _uiState.update { it.copy(error = e.message) }
+                _uiState.update { it.copy(activitiesError = e.message) }
             }
         }
     }
 
     fun updateActivity(activity: ActivityEntity) {
-        Log.d(TAG, "Updating activity: $activity")
         viewModelScope.launch {
             try {
                 repository.updateActivity(activity)
-                Log.d(TAG, "Activity updated successfully")
             } catch (e: Exception) {
                 Log.e(TAG, "Error updating activity", e)
-                _uiState.update { it.copy(error = e.message) }
+                _uiState.update { it.copy(activitiesError = e.message) }
             }
         }
     }
 
     fun deleteActivity(activity: ActivityEntity) {
-        Log.d(TAG, "Deleting activity: $activity")
         viewModelScope.launch {
             try {
                 repository.deleteActivity(activity)
-                Log.d(TAG, "Activity deleted successfully")
             } catch (e: Exception) {
                 Log.e(TAG, "Error deleting activity", e)
-                _uiState.update { it.copy(error = e.message) }
+                _uiState.update { it.copy(activitiesError = e.message) }
             }
         }
     }
 
-    fun getTodayStats(): Flow<Map<String, Int>> = flow {
-        val calendar = Calendar.getInstance()
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        calendar.set(Calendar.MILLISECOND, 0)
+    fun getTodayStats(): Flow<Map<String, Int>> {
+        Log.d(TAG, "Getting today's statistics")
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
         val startOfDay = calendar.timeInMillis
+        val endOfDay = startOfDay + TimeUnit.DAYS.toMillis(1) - 1
+        Log.d(TAG, "Today's date range: [$startOfDay, $endOfDay]")
 
-        calendar.set(Calendar.HOUR_OF_DAY, 23)
-        calendar.set(Calendar.MINUTE, 59)
-        calendar.set(Calendar.SECOND, 59)
-        val endOfDay = calendar.timeInMillis
-
-        val steps = repository.getTotalByTypeAndDateRange("Steps", startOfDay, endOfDay)
-        val calories = repository.getTotalByTypeAndDateRange("Calories", startOfDay, endOfDay)
-        val workout = repository.getTotalByTypeAndDateRange("Workout", startOfDay, endOfDay)
-
-        Log.d(TAG, "Today's stats - Steps: $steps, Calories: $calories, Workout: $workout")
-        emit(mapOf(
-            "Steps" to steps,
-            "Calories" to calories,
-            "Workout" to workout
-        ))
+        return repository.getActivitiesByDateRange(startOfDay, endOfDay)
+            .map { activities ->
+                Log.d(TAG, "Processing ${activities.size} activities for today")
+                aggregateStats(activities)
+            }
+            .flowOn(Dispatchers.IO)
     }
 
-    fun getWeeklyStats(): Flow<Map<String, Int>> = flow {
-        val calendar = Calendar.getInstance()
-        calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
+    fun getWeeklyStats(): Flow<Map<String, Int>> {
+        Log.d(TAG, "Getting weekly statistics")
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }
+        val endOfRange = calendar.timeInMillis
+        calendar.add(Calendar.DAY_OF_YEAR, -6)
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
-        val startOfWeek = calendar.timeInMillis
+        val startOfRange = calendar.timeInMillis
+        Log.d(TAG, "Weekly date range: [$startOfRange, $endOfRange]")
 
-        val endOfWeek = System.currentTimeMillis()
-
-        val steps = repository.getTotalByTypeAndDateRange("Steps", startOfWeek, endOfWeek)
-        val calories = repository.getTotalByTypeAndDateRange("Calories", startOfWeek, endOfWeek)
-        val workout = repository.getTotalByTypeAndDateRange("Workout", startOfWeek, endOfWeek)
-
-        Log.d(TAG, "Weekly stats - Steps: $steps, Calories: $calories, Workout: $workout")
-        emit(mapOf(
-            "Steps" to steps,
-            "Calories" to calories,
-            "Workout" to workout
-        ))
+        return repository.getActivitiesByDateRange(startOfRange, endOfRange)
+            .map { activities ->
+                Log.d(TAG, "Processing ${activities.size} activities for this week")
+                aggregateStats(activities)
+            }
+            .flowOn(Dispatchers.IO)
     }
 
-    fun calculateCaloriesBurned(activityType: String, duration: Int, weight: Float): Int {
-        return repository.calculateCaloriesBurned(activityType, duration, weight)
-    }
+    fun calculateCaloriesBurned(activityType: String, duration: Int, weight: Float): Int =
+        repository.calculateCaloriesBurned(activityType, duration, weight)
 
-    fun calculateStepGoalProgress(currentSteps: Int, goalSteps: Int): Float {
-        return repository.calculateStepGoalProgress(currentSteps, goalSteps)
-    }
+    fun calculateStepGoalProgress(currentSteps: Int, goalSteps: Int): Float =
+        repository.calculateStepGoalProgress(currentSteps, goalSteps)
 
-    // User preferences methods
     fun setDarkTheme(enabled: Boolean) {
         Log.d(TAG, "Setting dark theme: $enabled")
-        viewModelScope.launch {
-            userPreferences.setDarkTheme(enabled)
+        viewModelScope.launch { 
+            try {
+                userPreferences.setDarkTheme(enabled)
+                Log.i(TAG, "Dark theme set successfully: $enabled")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set dark theme: ${e.message}", e)
+            }
         }
     }
 
     fun setDailyStepGoal(goal: Int) {
         Log.d(TAG, "Setting daily step goal: $goal")
-        viewModelScope.launch {
-            userPreferences.setDailyStepGoal(goal)
+        viewModelScope.launch { 
+            try {
+                userPreferences.setDailyStepGoal(goal)
+                Log.i(TAG, "Daily step goal set successfully: $goal")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set step goal: ${e.message}", e)
+            }
         }
     }
 
     fun setDailyCalorieGoal(goal: Int) {
         Log.d(TAG, "Setting daily calorie goal: $goal")
-        viewModelScope.launch {
-            userPreferences.setDailyCalorieGoal(goal)
+        viewModelScope.launch { 
+            try {
+                userPreferences.setDailyCalorieGoal(goal)
+                Log.i(TAG, "Daily calorie goal set successfully: $goal")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set calorie goal: ${e.message}", e)
+            }
         }
     }
 
     fun setUserName(name: String) {
         Log.d(TAG, "Setting user name: $name")
         viewModelScope.launch {
-            userPreferences.setUserName(name)
+            try {
+                userPreferences.setUserName(name)
+                userPreferences.updateProfileName(userPreferencesState.value.activeProfileId, name)
+                Log.i(TAG, "User name set successfully: $name")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set user name: ${e.message}", e)
+            }
         }
     }
 
     fun setUserWeight(weight: Float) {
-        Log.d(TAG, "Setting user weight: $weight")
-        viewModelScope.launch {
-            userPreferences.setUserWeight(weight)
+        Log.d(TAG, "Setting user weight: ${weight}kg")
+        viewModelScope.launch { 
+            try {
+                userPreferences.setUserWeight(weight)
+                Log.i(TAG, "User weight set successfully: ${weight}kg")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set user weight: ${e.message}", e)
+            }
         }
     }
 
     fun setUserHeight(height: Float) {
-        Log.d(TAG, "Setting user height: $height")
-        viewModelScope.launch {
-            userPreferences.setUserHeight(height)
+        Log.d(TAG, "Setting user height: ${height}cm")
+        viewModelScope.launch { 
+            try {
+                userPreferences.setUserHeight(height)
+                Log.i(TAG, "User height set successfully: ${height}cm")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set user height: ${e.message}", e)
+            }
         }
     }
 
     fun setFirstLaunchComplete() {
-        Log.d(TAG, "Setting first launch complete")
-        viewModelScope.launch {
-            userPreferences.setFirstLaunchComplete()
-        }
+        viewModelScope.launch { userPreferences.setFirstLaunchComplete() }
     }
 
     fun clearError() {
-        _uiState.update { it.copy(error = null, tipsError = null) }
+        _uiState.update {
+            it.copy(
+                error = null,
+                activitiesError = null,
+                suggestionsError = null,
+                authError = null
+            )
+        }
+    }
+
+    fun beginGoogleSignIn() {
+        _uiState.update { it.copy(authLoading = true, authError = null) }
+    }
+
+    fun loginAsDemo() {
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(authLoading = true, authError = null) }
+                val profile = userPreferences.upsertDemoProfile()
+                userPreferences.setFirstLaunchComplete()
+                userPreferences.setLoggedIn(true)
+                userPreferences.setUserName(profile.displayName)
+                _uiState.update { it.copy(authLoading = false, authError = null) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Demo login failed", e)
+                _uiState.update {
+                    it.copy(
+                        authLoading = false,
+                        authError = e.message ?: "Unable to start SmartFit demo mode right now."
+                    )
+                }
+            }
+        }
+    }
+
+    fun completeGoogleSignIn(accountId: String?, displayName: String?, email: String?) {
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(authLoading = true, authError = null) }
+                val profile = userPreferences.upsertProfileFromGoogleAccount(accountId, displayName, email)
+                userPreferences.setFirstLaunchComplete()
+                userPreferences.setLoggedIn(true)
+                userPreferences.setUserName(profile.displayName)
+                _uiState.update { it.copy(authLoading = false, authError = null) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Google login failed", e)
+                _uiState.update {
+                    it.copy(
+                        authLoading = false,
+                        authError = e.message ?: "Unable to sign in with Google right now."
+                    )
+                }
+            }
+        }
+    }
+
+    fun handleGoogleSignInFailure(message: String?, isCancelled: Boolean = false) {
+        _uiState.update {
+            it.copy(
+                authLoading = false,
+                authError = if (isCancelled) null else message ?: "Unable to sign in with Google right now."
+            )
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            try {
+                userPreferences.setLoggedIn(false)
+                userPreferences.setActiveProfileId(null)
+                _uiState.update { it.copy(authLoading = false, authError = null) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Logout failed", e)
+                _uiState.update { it.copy(authError = e.message) }
+            }
+        }
+    }
+
+    private fun aggregateStats(activities: List<ActivityEntity>): Map<String, Int> {
+        Log.d(TAG, "Aggregating statistics for ${activities.size} activities")
+        val totals = activities.groupBy { it.type }.mapValues { entry ->
+            entry.value.sumOf { activity -> activity.value }
+        }
+
+        val result = mapOf(
+            "Steps" to (totals["Steps"] ?: 0),
+            "Calories" to (totals["Calories"] ?: 0),
+            "Workout" to (totals["Workout"] ?: 0)
+        )
+        Log.d(TAG, "Aggregated stats: Steps=${result["Steps"]}, Calories=${result["Calories"]}, Workouts=${result["Workout"]}")
+        return result
     }
 }
