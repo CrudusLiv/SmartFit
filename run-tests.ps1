@@ -1,5 +1,15 @@
 # SmartFit Test Runner
 # Enhanced test execution with beautiful output
+# Requires PowerShell 5.1 or higher
+
+# Check PowerShell version
+if ($PSVersionTable.PSVersion.Major -lt 5) {
+    Write-Host "ERROR: This script requires PowerShell 5.1 or higher" -ForegroundColor Red
+    Write-Host "Your version: $($PSVersionTable.PSVersion)" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "For Command Prompt, use: run-tests.bat" -ForegroundColor Cyan
+    exit 1
+}
 
 Write-Host "`n" -NoNewline
 Write-Host "╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
@@ -13,9 +23,17 @@ Write-Host ""
 Write-Host "⏳ Running unit tests..." -ForegroundColor Yellow
 Write-Host ""
 
-$output = & .\gradlew.bat :app:testDebugUnitTest 2>&1
+$errorOccurred = $false
+try {
+    $output = & .\gradlew.bat :app:testDebugUnitTest 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $errorOccurred = $true
+    }
+} catch {
+    $errorOccurred = $true
+}
 
-if ($LASTEXITCODE -eq 0) {
+if (-not $errorOccurred) {
     Write-Host "✅ Tests completed successfully!`n" -ForegroundColor Green
     
     # Parse and display results
@@ -98,7 +116,9 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "🌐 Opening HTML report in browser..." -ForegroundColor Cyan
     Start-Process "test-report.html"
     
-} else {
+}
+
+if ($errorOccurred) {
     Write-Host "❌ Tests failed to execute!`n" -ForegroundColor Red
     Write-Host "Error output:" -ForegroundColor Yellow
     Write-Host $output
