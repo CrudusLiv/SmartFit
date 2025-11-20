@@ -1,6 +1,7 @@
 package com.example.smartfit.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -9,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.smartfit.ui.screens.*
 import com.example.smartfit.viewmodel.ActivityViewModel
+import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
@@ -30,6 +32,8 @@ fun NavGraph(
     onRequestGoogleSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    
     NavHost(
         navController = navController,
         startDestination = Screen.Splash.route,
@@ -121,10 +125,12 @@ fun NavGraph(
                     null
                 },
                 onLogout = {
-                    viewModel.logout()
-                    onRequestGoogleSignOut()
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Home.route) { inclusive = true }
+                    coroutineScope.launch {
+                        viewModel.logout()
+                        onRequestGoogleSignOut()
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(Screen.Home.route) { inclusive = true }
+                        }
                     }
                 }
             )
