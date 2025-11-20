@@ -306,10 +306,6 @@ class ActivityRepository(
             }
 
             response.results.forEachIndexed { index, info ->
-                // Only include exercises that have actual descriptions
-                if (info.description.isNullOrBlank()) {
-                    return@forEachIndexed
-                }
                 
                 val key = uniqueExerciseKey(info, offsetCursor + index)
                 if (!exerciseMap.containsKey(key)) {
