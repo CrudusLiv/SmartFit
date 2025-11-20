@@ -417,16 +417,14 @@ class ActivityViewModel(
         }
     }
 
-    fun logout() {
-        viewModelScope.launch {
-            try {
-                userPreferences.setLoggedIn(false)
-                userPreferences.setActiveProfileId(null)
-                _uiState.update { it.copy(authLoading = false, authError = null) }
-            } catch (e: Exception) {
-                Log.e(TAG, "Logout failed", e)
-                _uiState.update { it.copy(authError = e.message) }
-            }
+    suspend fun logout() {
+        try {
+            userPreferences.setLoggedIn(false)
+            userPreferences.setActiveProfileId(null)
+            _uiState.update { it.copy(authLoading = false, authError = null) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Logout failed", e)
+            _uiState.update { it.copy(authError = e.message) }
         }
     }
 
