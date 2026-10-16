@@ -54,18 +54,6 @@ A modern Android fitness tracking application built with Jetpack Compose that se
 
 ---
 
-## 📱 Screenshots
-
-<div align="center">
-
-| Home Dashboard | Activity Log | Exercise Library | Profile |
-|:---:|:---:|:---:|:---:|
-| ![Home](https://via.placeholder.com/200x400/667eea/ffffff?text=Home) | ![Activities](https://via.placeholder.com/200x400/764ba2/ffffff?text=Activities) | ![Exercises](https://via.placeholder.com/200x400/667eea/ffffff?text=Exercises) | ![Profile](https://via.placeholder.com/200x400/764ba2/ffffff?text=Profile) |
-
-</div>
-
----
-
 ## 🚀 Installation
 
 ### Prerequisites
